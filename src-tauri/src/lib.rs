@@ -5,6 +5,7 @@
 //! output device so reopening the app puts them back where they left off.
 
 mod commands;
+mod ext_commands;
 mod media;
 mod state;
 
@@ -73,6 +74,8 @@ pub fn run() {
             commands::pick_folder,
             commands::pick_files,
             commands::reveal_track,
+            ext_commands::extensions_snapshot,
+            ext_commands::extensions_install_file,
         ])
         .setup(|app| {
             let root = AppPaths::resolve().data_dir;
@@ -95,6 +98,15 @@ pub fn run() {
                 },
                 None => media::spawn(app.handle().clone(), 0),
             };
+
+            // Extension host.
+            let ext_root = root.join("extensions");
+            let ext_store = qext::store::ExtensionStore::open(&ext_root)
+                .map_err(|e| e.to_string())?;
+            app.manage(ext_commands::ExtensionState {
+                store: Mutex::new(ext_store),
+                root: ext_root,
+            });
 
             app.manage(AppState {
                 library: Mutex::new(library),
