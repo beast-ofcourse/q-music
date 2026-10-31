@@ -1,0 +1,181 @@
+/* The download queue, inside the now panel.
+   A job is a file being fetched and written, so it shows the figures a transfer actually
+   produces: stage, percent, bytes, rate. The bar is the only thing that moves. */
+
+.dl-pane {
+  display: grid;
+  align-content: start;
+}
+
+.dl-list {
+  display: grid;
+}
+
+.dl-job {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.dl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.dl-stage {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.dl-job[data-stage="failed"] .dl-stage {
+  color: var(--signal-text);
+}
+
+.dl-job[data-stage="done"] .dl-stage {
+  color: var(--ink);
+}
+
+.dl-percent {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-title {
+  font-size: var(--text-md);
+  line-height: 1.3;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.dl-sub {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+/* The hairline is drawn with an inset ring, not a border. A border on a 4px box leaves
+   2px of content, which turns the fill into a 2px sliver that reads as a smudge. */
+.dl-track {
+  height: 4px;
+  margin-top: 3px;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+
+.dl-fill {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+  transition: width 220ms var(--ease-out);
+}
+
+.dl-figures {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dl-failure {
+  display: grid;
+  gap: 2px;
+  margin-top: 2px;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--signal);
+}
+
+.dl-failure-kind {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--signal-text);
+}
+
+.dl-failure-text,
+.dl-failure-stage {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.dl-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: 2px;
+}
+
+.dl-action {
+  height: 26px;
+  padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.dl-action:hover:not(:disabled) {
+  border-color: var(--ink-3);
+  background: var(--bg-raised);
+  color: var(--ink);
+}
+
+.dl-action:disabled {
+  border-color: var(--line);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.dl-loading {
+  padding: var(--space-4);
+  font-size: var(--text-md);
+  color: var(--ink-3);
+}
+
+.dl-banner {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin: var(--space-3) var(--space-4) 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--signal);
+}
+
+.dl-job .dl-banner {
+  margin: 2px 0 0;
+}
+
+.dl-banner-text {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.dl-banner-label {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dl-fill {
+    transition: none;
+  }
+}

@@ -1,0 +1,468 @@
+/* Extension settings sheet.
+   Replaces the catalogue inside the main column: a pinned identity head, the generated
+   fields scrolling between them, and a save bar that never sits under the transport.
+   Surfaces are the page ground; only the empty and error panels are raised, in step with
+   the rest of the window. */
+
+.ext-settings {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  outline: none;
+}
+
+/* ---------------------------------------------------------------- sheet head --- */
+
+.ext-settings-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  min-height: 64px;
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.ext-settings-back {
+  flex: none;
+  margin-top: 1px;
+  padding: 0 var(--space-2);
+}
+
+.ext-settings-identity {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ext-settings-eyebrow {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ext-settings-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  min-width: 0;
+}
+
+.ext-settings-title {
+  overflow-wrap: anywhere;
+}
+
+.ext-settings-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ext-settings-dirty {
+  flex: none;
+  align-self: center;
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal-text);
+  border: 1px solid var(--signal);
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-2);
+}
+
+/* -------------------------------------------------------------- sheet scroll --- */
+
+.ext-settings-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.ext-settings-inner {
+  display: grid;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: 980px;
+  padding: var(--space-5);
+  animation: ext-sheet-in 180ms var(--ease-out);
+}
+
+@keyframes ext-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ quality --- */
+
+.ext-settings-quality,
+.ext-settings-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ext-settings-legend {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 0;
+}
+
+.ext-quality-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.ext-quality-select {
+  width: 100%;
+  max-width: 320px;
+  flex: 0 1 320px;
+}
+
+.ext-quality-desc {
+  flex: 1 1 280px;
+  min-width: 0;
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 64ch;
+}
+
+.ext-quality-override {
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 72ch;
+}
+
+.ext-quality-override strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.ext-settings-hint {
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 72ch;
+}
+
+/* ------------------------------------------------------------ generated fields --- */
+
+.ext-settings-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 1181px) {
+  .ext-settings-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--space-6);
+  }
+}
+
+.ext-setting {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ext-setting-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.ext-setting-name {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.ext-setting-badge {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--signal-text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+  overflow-wrap: anywhere;
+}
+
+.ext-setting-desc,
+.ext-setting-note {
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  max-width: 64ch;
+}
+
+.ext-setting-note {
+  color: var(--signal-text);
+}
+
+.ext-setting .input,
+.ext-setting .select {
+  min-width: 0;
+  width: 100%;
+}
+
+.ext-setting .input:disabled,
+.ext-setting .select:disabled {
+  color: var(--ink-2);
+  background: var(--bg-raised);
+  border-color: var(--line);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.ext-setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+
+.ext-setting-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--signal);
+}
+
+.ext-setting-checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.ext-setting-state {
+  font-family: var(--font-num);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.ext-setting-action {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ext-action-outcome {
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  max-width: 64ch;
+}
+
+.ext-action-outcome[data-tone="ok"] {
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--ink-3);
+}
+
+.ext-action-outcome[data-tone="error"] {
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--signal);
+  color: var(--signal-text);
+}
+
+/* -------------------------------------------------------- loading and failure --- */
+
+.ext-settings-loading {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ext-settings-skeleton {
+  height: 56px;
+  border: 1px solid var(--line);
+  background-color: var(--bg-sunken);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--bg-raised) 40%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: ext-sheet-sweep 1.4s linear infinite;
+}
+
+@keyframes ext-sheet-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+.ext-settings-error,
+.ext-settings-empty {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  max-width: 560px;
+  padding: var(--space-5);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.ext-settings-error {
+  border-left: 2px solid var(--signal);
+}
+
+.ext-settings-error-title,
+.ext-settings-empty-title {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.ext-settings-error-body,
+.ext-settings-empty-body {
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 60ch;
+  overflow-wrap: anywhere;
+}
+
+.ext-settings-error .actions {
+  margin-top: var(--space-2);
+}
+
+/* -------------------------------------------------------------- leave confirm --- */
+
+.ext-settings-confirm {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+}
+
+.ext-settings-confirm-text {
+  flex: 1 1 280px;
+  min-width: 0;
+  font-size: var(--text-md);
+  color: var(--ink);
+}
+
+.ext-settings-confirm-text span {
+  display: block;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.ext-settings-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.ext-settings-confirm .button-danger {
+  color: var(--signal-text);
+}
+
+/* ----------------------------------------------------------------- save bar --- */
+
+.ext-settings-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.ext-settings-foot-hint {
+  flex: 1 1 100%;
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--signal-text);
+}
+
+.ext-settings-save-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.ext-settings-save-status[data-tone="error"] {
+  color: var(--signal-text);
+}
+
+.ext-settings-foot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* White on the carbon and stage signal measures 4.32:1, below the window's floor. The
+   ground token on the same fill measures 4.98:1; paper's signal needs white. */
+.ext-settings .button-primary,
+.ext-settings .button-primary:hover {
+  color: var(--bg);
+}
+
+[data-theme="paper"] .ext-settings .button-primary,
+[data-theme="paper"] .ext-settings .button-primary:hover {
+  color: #fff;
+}
+
+/* ---------------------------------------------------------- reduced motion --- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ext-settings-inner,
+  .ext-settings-skeleton {
+    animation: none;
+  }
+}

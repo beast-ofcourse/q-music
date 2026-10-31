@@ -1,0 +1,31 @@
+[package]
+name = "qext"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Q-Music extension host: package safety, sandboxed runtime, providers and downloads."
+
+[features]
+real-packages = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+sha2 = "0.11"
+zip = "9"
+rquickjs = "0.14"
+url = "2"
+ureq = { version = "3", features = ["rustls", "cookies"] }
+md-5 = "0.11.0"
+sha1 = "0.11.0"
+hmac = "0.13.0"
+base64 = "0.23.1"
+aes-gcm = "0.11.1"
+getrandom = "0.4.3"
+iana-time-zone = "0.1"
+chrono = "0.4"
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"

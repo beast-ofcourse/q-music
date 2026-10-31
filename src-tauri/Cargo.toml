@@ -1,0 +1,25 @@
+[package]
+name = "q-music"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Q-Music desktop shell: window, commands and OS media integration."
+
+[lib]
+name = "q_music_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+qcore = { path = "../crates/qcore" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.23"
+souvlaki = "0.9"
+
+[profile.dev]
+incremental = true

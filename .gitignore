@@ -1,0 +1,49 @@
+# Rust
+/target/
+**/target/
+Cargo.lock
+
+# Node
+node_modules/
+dist/
+.npm/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Temporary
+.impeccable/
+temp_extract/
+*.tmp
+
+# AI agent tooling (not part of the project)
+.agents/
+.hermes/
+.codex/

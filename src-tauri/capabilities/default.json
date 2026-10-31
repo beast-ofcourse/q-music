@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Q-Music runs its own commands; the webview only needs core window access.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
