@@ -46,6 +46,7 @@ impl From<qext::store::InstalledExtension> for InstalledExtensionView {
 pub struct ExtensionState {
     pub store: Mutex<ExtensionStore>,
     pub root: PathBuf,
+    pub download_jobs: Mutex<Vec<serde_json::Value>>,
 }
 
 /// Install an extension from a file chosen via dialog.
@@ -300,38 +301,55 @@ pub async fn providers_list(
 /// List download queue jobs.
 #[tauri::command]
 pub fn queue_jobs(
-    _ext_state: State<'_, ExtensionState>,
+    ext_state: State<'_, ExtensionState>,
 ) -> Result<serde_json::Value, String> {
-    // The download queue in the desktop app is simpler than the demo.
-    // Return an empty list for now — jobs are managed by the store.
-    Ok(serde_json::json!([]))
+    let jobs = ext_state
+        .download_jobs
+        .lock()
+        .map_err(|_| "download jobs poisoned".to_string())?;
+    Ok(serde_json::json!(*jobs))
 }
 
 /// Cancel a download job.
 #[tauri::command]
 pub fn queue_cancel(
-    _ext_state: State<'_, ExtensionState>,
-    _job_id: String,
+    ext_state: State<'_, ExtensionState>,
+    job_id: String,
 ) -> Result<(), String> {
+    let mut jobs = ext_state
+        .download_jobs
+        .lock()
+        .map_err(|_| "download jobs poisoned".to_string())?;
+    jobs.retain(|job| job.get("id").and_then(|v| v.as_str()) != Some(&job_id));
     Ok(())
 }
 
 /// Retry a failed download job.
 #[tauri::command]
 pub fn queue_retry(
-    _ext_state: State<'_, ExtensionState>,
-    _job_id: String,
+    ext_state: State<'_, ExtensionState>,
+    job_id: String,
 ) -> Result<(), String> {
+    let mut jobs = ext_state
+        .download_jobs
+        .lock()
+        .map_err(|_| "download jobs poisoned".to_string())?;
+    for job in jobs.iter_mut() {
+        if job.get("id").and_then(|v| v.as_str()) == Some(&job_id) {
+            job["stage"] = serde_json::json!("queued");
+            job["percent"] = serde_json::json!(0);
+            job["failure"] = serde_json::json!(null);
+        }
+    }
     Ok(())
 }
 
 /// Enqueue a download from a provider track.
 #[tauri::command]
 pub fn queue_enqueue(
-    _ext_state: State<'_, ExtensionState>,
+    ext_state: State<'_, ExtensionState>,
     track: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    // Return a synthetic job for now.
     let job = serde_json::json!({
         "id": format!("job-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
         "trackId": track.get("providerTrackId").and_then(|v| v.as_str()).unwrap_or(""),
@@ -348,8 +366,17 @@ pub fn queue_enqueue(
         "failure": null,
         "updatedAt": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as i64,
     });
+
+    let mut jobs = ext_state
+        .download_jobs
+        .lock()
+        .map_err(|_| "download jobs poisoned".to_string())?;
+    jobs.push(job.clone());
+
     Ok(job)
 }
+
+
 
 /// Fetch lyrics from installed lyrics providers.
 #[tauri::command]

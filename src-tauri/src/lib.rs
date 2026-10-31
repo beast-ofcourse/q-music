@@ -120,6 +120,7 @@ pub fn run() {
             app.manage(ext_commands::ExtensionState {
                 store: Mutex::new(ext_store),
                 root: ext_root,
+                download_jobs: Mutex::new(Vec::new()),
             });
 
             app.manage(AppState {
