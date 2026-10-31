@@ -178,12 +178,17 @@ All supported by Symphonia: FLAC, MP3, M4A/AAC, WAV, OGG, OPUS, AIFF, ALAC
 
 - **No duplicate detection**: When scanning, duplicate files (same path) are not detected
 - **No automatic rescan on file changes**: Library only updates on manual rescan
-- **Artwork cache**: Artwork is extracted on demand, not pre-cached during scan
 
-### 4.3 Library Improvements Made
+### 4.3 Library Improvements (Already Implemented)
 
+- ✅ **Incremental rescan**: Scan checks mtime + size_bytes and skips unchanged files (`scan.rs` line 95-99)
+- ✅ **Artwork pre-caching**: Artwork is extracted and stored during scan (`scan.rs` line 101-104)
 - ✅ Playback position persistence added (engine snapshot includes positionMs)
 - ✅ Search performance improved (50ms debounce)
+
+### 4.4 Connection Pooling Assessment
+
+Connection pooling is **not needed** for this desktop application. The `Library` is wrapped in a `Mutex` in `AppState`, which serializes access. SQLite with WAL mode allows concurrent readers. For a single-user desktop app, this is the appropriate architecture. Adding a connection pool would add complexity without measurable benefit.
 
 ## Phase 5 — Extensions and Downloads
 
@@ -210,16 +215,19 @@ All supported by Symphonia: FLAC, MP3, M4A/AAC, WAV, OGG, OPUS, AIFF, ALAC
 
 ### 5.2 Extension Improvements Made
 
-- ✅ Implemented 8 additional Tauri commands (providers_list, queue_jobs, queue_cancel, queue_retry, queue_enqueue, provider_lyrics, extensions_snapshot, extensions_install_file, search_providers)
+- ✅ Implemented 15 Tauri commands (extensions_snapshot, extensions_install_file, extensions_settings, extensions_save_settings, extensions_invoke_action, extensions_set_enabled, extensions_uninstall, search_providers, providers_list, providers_set_priority, providers_retry, provider_lyrics, queue_jobs, queue_cancel, queue_retry, queue_enqueue)
 - ✅ All 12 providers now installable (signedSession, sessionGrant, downloadSegments implemented)
 - ✅ Download from search results works (enqueueDownload API)
 - ✅ Default search provider selector
+- ✅ Download queue now stores jobs in memory (queue_jobs returns actual jobs)
+- ✅ Extension settings wired in desktop mode
+- ✅ Provider priority/retry wired in desktop mode
 
 ### 5.3 Remaining Gaps
 
-- Download queue in desktop mode returns empty (needs full queue integration)
-- Extension settings not yet wired in desktop mode
-- Provider priority/retry not yet wired in desktop mode
+- Download queue in desktop mode does not actually download files (needs full download executor integration)
+- Extension settings are not persisted across restarts (in-memory only)
+- Provider health is not tracked in desktop mode (always returns healthy)
 - Extension invoke_action not yet wired
 
 ## Phase 6 — UI/UX Consistency Audit
