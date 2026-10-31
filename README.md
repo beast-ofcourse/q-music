@@ -43,30 +43,7 @@ The whole listening path — scan, index, decode, output, tag write, lyric sync 
 - **Extensions** — plug in metadata, search, and download providers (Mornye-compatible)
 - **Lightweight** — opens in seconds, stays small in memory
 
-## Screenshots
-
-<p align="center">
-  <img src=".impeccable/review/01-library-idle.png" alt="Library view" width="700" />
-</p>
-<p align="center">
-  <em>Library view — idle state</em>
-</p>
-
-<p align="center">
-  <img src=".impeccable/review/02-library-playing.png" alt="Library playing" width="700" />
-</p>
-<p align="center">
-  <em>Library view — playing a track</em>
-</p>
-
-<p align="center">
-  <img src=".impeccable/review/05-search.png" alt="Search" width="700" />
-</p>
-<p align="center">
-  <em>Search with provider results</em>
-</p>
-
-## Architecture
+## Architecture:
 
 ```
 ┌─────────────────────────────────────────────┐
