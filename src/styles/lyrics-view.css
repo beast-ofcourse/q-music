@@ -1,6 +1,6 @@
 /* Full-screen synced lyrics view.
-   Cinematic, minimal, immersive: the active line glows, past lines fade,
-   future lines recede. Blurred artwork behind. No chrome. */
+   Clean, premium, readable: dark background, clear typography,
+   active line highlighted. No glassmorphism, no excessive blur. */
 
 .lyrics-view {
   position: relative;
@@ -11,76 +11,59 @@
   background: var(--bg);
 }
 
-/* Blurred artwork background */
+/* Blurred artwork background — behind everything, dimmed */
 .lyrics-view-bg {
   position: absolute;
-  inset: -40px;
+  inset: 0;
   background-size: cover;
   background-position: center;
-  filter: blur(80px) brightness(0.12) saturate(1.8);
-  transform: scale(1.3);
+  filter: blur(40px) brightness(0.2) saturate(1.3);
+  transform: scale(1.1);
   z-index: 0;
-  transition: opacity 600ms var(--ease-out);
-}
-
-/* Subtle vignette overlay */
-.lyrics-view::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, transparent 30%, var(--bg) 100%);
-  z-index: 0;
-  pointer-events: none;
 }
 
 /* Close button */
 .lyrics-view-close {
   position: absolute;
-  top: var(--space-5);
-  right: var(--space-5);
-  z-index: 3;
-  width: 40px;
-  height: 40px;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 2;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border: 1px solid var(--line-strong);
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   color: var(--ink-2);
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-raised);
   cursor: pointer;
-  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out), background 150ms var(--ease-out);
+  transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 .lyrics-view-close:hover {
   border-color: var(--ink-3);
   color: var(--ink);
-  background: rgba(0, 0, 0, 0.5);
 }
 
-/* Track info — minimal, top-left */
+/* Track info — top left */
 .lyrics-view-track {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   padding: var(--space-5) var(--space-6) var(--space-2);
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
+  display: grid;
+  gap: 2px;
 }
 
 .lyrics-view-track-title {
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--ink);
   line-height: 1.2;
-  letter-spacing: 0.01em;
 }
 
 .lyrics-view-track-artist {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--ink-3);
-  letter-spacing: 0.02em;
 }
 
 /* Scroll container */
@@ -91,8 +74,6 @@
   overflow-y: auto;
   padding: 0 var(--space-6);
   scroll-behavior: smooth;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
 }
 
 .lyrics-view-scroll::-webkit-scrollbar {
@@ -114,7 +95,7 @@
 
 /* Spacers for centering active line */
 .lyrics-view-spacer {
-  height: 45vh;
+  height: 40vh;
   flex-shrink: 0;
 }
 
@@ -122,42 +103,40 @@
 .lyrics-view-line {
   display: block;
   width: 100%;
-  max-width: 42rem;
+  max-width: 36rem;
   text-align: left;
   background: none;
   border: none;
-  padding: var(--space-3) 0;
+  padding: var(--space-2) 0;
   margin: 0;
-  font-size: 1.75rem;
+  font-size: 20px;
   font-weight: 400;
-  line-height: 1.5;
-  color: var(--ink-3);
-  opacity: 0.25;
-  transition: color 400ms var(--ease-out), opacity 400ms var(--ease-out), font-size 400ms var(--ease-out), font-weight 400ms var(--ease-out);
+  line-height: 1.6;
+  color: var(--ink-2);
+  opacity: 0.6;
+  transition: color 250ms var(--ease-out), opacity 250ms var(--ease-out), font-size 250ms var(--ease-out);
   cursor: pointer;
-  letter-spacing: -0.01em;
 }
 
 .lyrics-view-line[data-active="true"] {
   color: var(--ink);
   opacity: 1;
-  font-size: 2.25rem;
+  font-size: 26px;
   font-weight: 600;
-  text-shadow: 0 0 40px rgba(255, 255, 255, 0.08);
 }
 
 .lyrics-view-line[data-past="true"] {
   color: var(--ink-2);
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .lyrics-view-line[data-future="true"] {
   color: var(--ink-3);
-  opacity: 0.2;
+  opacity: 0.35;
 }
 
 .lyrics-view-line:hover:not(:disabled) {
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 .lyrics-view-line:disabled {
@@ -181,7 +160,6 @@
   font-weight: 500;
   color: var(--ink);
   margin: 0;
-  letter-spacing: -0.01em;
 }
 
 .lyrics-view-empty-body {
@@ -192,16 +170,14 @@
 
 .lyrics-view-back {
   margin-top: var(--space-4);
-  padding: var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   color: var(--ink-2);
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-raised);
   cursor: pointer;
   font-size: var(--text-md);
-  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out);
+  transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 .lyrics-view-back:hover {
@@ -220,7 +196,7 @@
   z-index: 1;
 }
 
-/* "Return to current" button */
+/* Return to current button */
 .lyrics-view-return {
   position: absolute;
   bottom: var(--space-5);
@@ -231,15 +207,13 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   color: var(--ink-2);
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-raised);
   cursor: pointer;
   font-size: var(--text-xs);
   font-family: var(--font-num);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out);
+  transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 .lyrics-view-return:hover {
@@ -250,10 +224,10 @@
 /* Responsive */
 @media (max-width: 959px) {
   .lyrics-view-line {
-    font-size: 1.25rem;
+    font-size: 16px;
   }
   .lyrics-view-line[data-active="true"] {
-    font-size: 1.5rem;
+    font-size: 20px;
   }
   .lyrics-view-track {
     padding: var(--space-4) var(--space-4) var(--space-2);
