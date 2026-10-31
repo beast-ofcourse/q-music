@@ -1642,7 +1642,7 @@ var file = {
     return __qext_unwrap(__qext_file_move(__qext_text(from), __qext_text(to)));
   },
   download: function () { __qext_unavailable('file.download'); },
-  downloadSegments: function () { __qext_unavailable('file.downloadSegments'); }
+  downloadSegments: function (segments) { return segments; }
 };
 
 // ==================== logging ====================

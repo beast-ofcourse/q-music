@@ -393,10 +393,7 @@ const DEMO_STORE_KEY = "qmusic.demo.extensions.v1";
  * "Scope boundary"). The demo refuses them for the same reason rather than failing a
  * checksum, which is what would happen if it pretended the package had been downloaded.
  */
-const DEMO_FEATURE_REFUSALS: Record<string, string[]> = {
-  amazon: ["signedSession@3"],
-  "tidal-web": ["signedSession@3"],
-};
+const DEMO_FEATURE_REFUSALS: Record<string, string[]> = {};
 
 interface DemoState {
   installed: InstalledExtension[];

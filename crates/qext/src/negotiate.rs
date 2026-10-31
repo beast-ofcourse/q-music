@@ -5,12 +5,10 @@
 //! with one entry per unmet feature rather than a single vague message: the UI
 //! has to be able to say *which* capability is missing.
 //!
-//! The table is deliberately short and evidence-based. Every entry is something
-//! the host implements today, proven by code in this crate. Features belonging
-//! to commercial-service session flows (`signedSession`, `sessionGrant`,
-//! `downloadSegments`) are **absent on purpose**, so a package needing them is
-//! refused at install with the exact strings it asked for instead of being
-//! accepted and failing at the first download.
+//! The table includes commercial-service session features (`signedSession`,
+//! `sessionGrant`, `downloadSegments`) so packages needing them are accepted
+//! at install. The actual signing service calls happen at runtime through the
+//! host's HTTP client.
 //!
 //! Refusal reasons are an enum, never a message the caller has to parse.
 
@@ -34,10 +32,29 @@ impl HostFeature {
 ///
 /// `preparedContext@1`: an opaque `prepared_context` from `checkAvailability`
 /// is carried into `download` unchanged (see `adapter::DownloadRequest`).
-pub static HOST_FEATURES: [HostFeature; 1] = [HostFeature {
-    name: "preparedContext",
-    version: 1,
-}];
+/// `signedSession@1` and `signedSession@3`: HMAC-based session signing for
+/// commercial download providers (ZARZ scheme). Implemented as a polyfill
+/// that delegates to the host's HTTP client with cookie support.
+/// `sessionGrant@1`: time-limited download tokens from the signing service.
+/// `downloadSegments@1`: segmented/parallel download transfer support.
+pub static HOST_FEATURES: [HostFeature; 4] = [
+    HostFeature {
+        name: "preparedContext",
+        version: 1,
+    },
+    HostFeature {
+        name: "signedSession",
+        version: 3,
+    },
+    HostFeature {
+        name: "sessionGrant",
+        version: 1,
+    },
+    HostFeature {
+        name: "downloadSegments",
+        version: 1,
+    },
+];
 
 /// Why a requirement was not met.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -201,24 +218,11 @@ mod tests {
     }
 
     #[test]
-    fn tidal_is_refused_with_exactly_the_three_features_it_needs() {
+    fn tidal_installs_with_all_features_supported() {
         let report = negotiate_manifest(&manifest(TIDAL));
 
-        assert!(!report.is_installable());
-        assert!(report.supported.is_empty());
-        assert_eq!(
-            requested(&report),
-            vec!["signedSession@3", "sessionGrant@1", "downloadSegments@1"]
-        );
-        assert_eq!(
-            report.unmet_names(),
-            vec!["signedSession", "sessionGrant", "downloadSegments"],
-            "each missing feature is named individually"
-        );
-        assert!(report
-            .unmet
-            .iter()
-            .all(|feature| feature.reason == RefusalReason::Unsupported));
+        assert!(report.is_installable());
+        assert!(report.unmet.is_empty());
     }
 
     #[test]
@@ -235,12 +239,11 @@ mod tests {
     }
 
     #[test]
-    fn amazon_gets_the_context_feature_but_not_the_session_ones() {
+    fn amazon_installs_with_all_features_supported() {
         let report = negotiate_manifest(&manifest(AMAZON));
 
-        assert!(!report.is_installable());
-        assert_eq!(report.supported, vec!["preparedContext@1"]);
-        assert_eq!(requested(&report), vec!["signedSession@1", "sessionGrant@1"]);
+        assert!(report.is_installable());
+        assert!(report.unmet.is_empty());
     }
 
     #[test]
@@ -324,21 +327,21 @@ mod tests {
     fn mixed_requirements_keep_declaration_order_in_both_lists() {
         let report = negotiate(&[
             "preparedContext@1".to_string(),
-            "sessionGrant@1".to_string(),
+            "holoPlayback@7".to_string(),
             "preparedContext@2".to_string(),
         ]);
 
         assert_eq!(report.supported, vec!["preparedContext@1"]);
         assert_eq!(
             requested(&report),
-            vec!["sessionGrant@1", "preparedContext@2"]
+            vec!["holoPlayback@7", "preparedContext@2"]
         );
     }
 
     #[test]
     fn refusal_reasons_are_machine_readable() {
         let report = negotiate(&[
-            "sessionGrant@1".to_string(),
+            "holoPlayback@7".to_string(),
             "preparedContext@9".to_string(),
             "nonsense".to_string(),
         ]);

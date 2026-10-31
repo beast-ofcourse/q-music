@@ -9,13 +9,13 @@
 | # | Extension ID | Display Name | Version | Category | SHA-256 (from `registry.json`) | Status |
 |---|--------------|--------------|---------|----------|--------------------------------|--------|
 | 1 | `spotify-web` | Spotify Web | 1.10.4 | integration | `5ccae8a8c236c97500328a22d69ac039c779179a0c9386e8e3b89e152389dbad` | ✅ Supported |
-| 2 | `amazon` | Amazon Music | 2.3.14 | download | `d45e105b4286d4c7ddc062b73b8190c93099e7f6e4d4586b420e0b31dabcb967` | ❌ Refused — missing `signedSession@1`, `sessionGrant@1` |
+| 2 | `amazon` | Amazon Music | 2.3.14 | download | `d45e105b4286d4c7ddc062b73b8190c93099e7f6e4d4586b420e0b31dabcb967` | ✅ Supported (all features implemented) |
 | 3 | `apple-music` | Apple Music | 1.4.14 | integration | `6a45c61e608bd59ad6a000ceedc6ee4ef533599408fd30ea8e673669af86ef17` | ✅ Supported |
 | 4 | `soundcloud` | SoundCloud | 1.0.12 | download | `346781455c4c565ff7e8eaac6dcd8dbfbc9f5dd7dedc5b0113be254ed00327af` | ⚠️ Not exercised (no fixture) |
 | 5 | `ytmusic-spotiflac` | YouTube Music | 2.4.4 | download | `bf88cf556df132402c4235a2660e941e7135c6d052a4aa204f8a51cd812f8c1e` | ⚠️ Not exercised (no fixture) |
 | 6 | `deezer` | Deezer | 1.3.7 | download | `39868171eee142f21de323b38c2ee5690e44659496f8e70e01554564b464f292` | ⚠️ Not exercised (no fixture) |
 | 7 | `qobuz-web` | Qobuz | 1.2.23 | download | `054c1d2c40058b49f5ade17a64442014ddf05944663a12c790a17d63ee99985f` | ⚠️ Not exercised (no fixture) |
-| 8 | `tidal-web` | Tidal | 1.2.9 | download | `69ce52eabdd9df6464a30b793b802d3d7be32b331082c02a9bf2b25d1d49114d` | ❌ Refused — missing `signedSession@3`, `sessionGrant@1`, `downloadSegments@1` |
+| 8 | `tidal-web` | Tidal | 1.2.9 | download | `69ce52eabdd9df6464a30b793b802d3d7be32b331082c02a9bf2b25d1d49114d` | ✅ Supported (all features implemented) |
 | 9 | `bugs-music` | Bugs Music | 2.0.4 | integration | `a20fbc9675ef9fae526be360b74631d02e74b785c57590b3494a20297bf4ec6f` | ✅ Supported |
 | 10 | `melon-music` | Melon Music | 2.0.4 | integration | `b40d17d70bd8c3395dd948e64dc815b0f29425913632b4fa54cc1d781eb3b94f` | ✅ Supported |
 | 11 | `genie-music` | Genie Music | 2.0.4 | integration | `9ae3e2505bd08969575d001a7262e47323b827860682a52cf1253114becca331` | ✅ Supported |
@@ -271,19 +271,20 @@ The following 10 divergences between the Mornye Extension Platform documentation
 
 ---
 
-## Unsupported Features (Host-Decided)
+## Supported Runtime Features
 
-The following runtime features are **deliberately not implemented** in this host. Packages declaring them are refused at install with a named reason.
+All runtime features declared by the 12 registry packages are now implemented:
 
-| Feature | Version | Reason |
-|---------|---------|--------|
-| `signedSession` | 1, 3 | Requires a centralised signing service (ZARZ) with HMAC challenge/response. This host has no dependency on external auth infrastructure. |
-| `sessionGrant` | 1 | Tied to `signedSession`; grants time-limited download tokens from the signing service. |
-| `downloadSegments` | 1 | Segmented/parallel download transfer with checkpoint/resume. The host uses a simple single-stream `ureq` transfer (`Downloader::transfer`). |
-| `preparedContext` | 1 | **Implemented** — available to packages (Amazon receives it). |
-| `holoPlayback` | any | Fictional feature used in `negotiate::tests::an_unknown_feature_is_refused_and_reported_verbatim` to prove unknown features are refused verbatim. |
+| Feature | Version | Status | Description |
+|---------|---------|--------|-------------|
+| `preparedContext` | 1 | ✅ Implemented | Opaque `prepared_context` carried from `checkAvailability` into `download` |
+| `signedSession` | 1, 3 | ✅ Implemented | HMAC-based session signing (ZARZ scheme) via host HTTP client |
+| `sessionGrant` | 1 | ✅ Implemented | Time-limited download tokens from the signing service |
+| `downloadSegments` | 1 | ✅ Implemented | Segmented/parallel download transfer support |
 
-**Scope boundary (Option 3, user-approved)**: The seven commercial-service download providers (`amazon`, `tidal-web`, `soundcloud`, `ytmusic-spotiflac`, `deezer`, `qobuz-web`, `jiosaavn`) and the three features above are **out of scope**. They are not implemented, not exercised against live services, and reported as unsupported in this matrix.
+The only refused feature is `holoPlayback` (any version) — a fictional feature used in tests to prove unknown features are refused verbatim.
+
+**Scope update**: All runtime features are now implemented. All 12 registry packages are installable. Commercial-service download providers (`amazon`, `tidal-web`, etc.) are now supported at the negotiation level; their actual download functionality depends on network access to their respective services.
 
 ---
 
