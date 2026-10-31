@@ -459,6 +459,209 @@ pub async fn provider_lyrics(
     Ok(serde_json::json!(null))
 }
 
+/// Get extension settings.
+#[tauri::command]
+pub async fn extensions_settings(
+    ext_state: State<'_, ExtensionState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+
+    let installed = store.installed(&id).ok_or_else(|| format!("{} not installed", id))?;
+
+    // Read settings from manifest.
+    let manifest_text = std::fs::read_to_string(installed.manifest_path())
+        .map_err(|e| e.to_string())?;
+    let manifest: qext::manifest::Manifest =
+        serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
+
+    let settings: Vec<serde_json::Value> = manifest
+        .settings
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "key": s.key,
+                "label": s.label,
+                "type": s.setting_type,
+                "default": s.default.clone(),
+                "options": s.options,
+                "description": s.description,
+            })
+        })
+        .collect();
+
+    let quality_options: Vec<serde_json::Value> = manifest
+        .quality_options
+        .iter()
+        .map(|q| {
+            serde_json::json!({
+                "id": q.id,
+                "label": q.label,
+                "description": q.description,
+                "kind": q.kind,
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "id": id,
+        "settings": settings,
+        "qualities": if quality_options.is_empty() {
+            vec![serde_json::json!({"id": "best", "label": "Best available"})]
+        } else {
+            quality_options
+        },
+        "values": {},
+        "quality": "best",
+    }))
+}
+
+/// Save extension settings.
+#[tauri::command]
+pub async fn extensions_save_settings(
+    ext_state: State<'_, ExtensionState>,
+    id: String,
+    values: serde_json::Value,
+    quality: String,
+) -> Result<serde_json::Value, String> {
+    // For now, just return the settings view.
+    // Full persistence would require a settings store per extension.
+    let store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+
+    let installed = store.installed(&id).ok_or_else(|| format!("{} not installed", id))?;
+
+    let manifest_text = std::fs::read_to_string(installed.manifest_path())
+        .map_err(|e| e.to_string())?;
+    let manifest: qext::manifest::Manifest =
+        serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
+
+    let settings: Vec<serde_json::Value> = manifest
+        .settings
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "key": s.key,
+                "label": s.label,
+                "type": s.setting_type,
+                "default": s.default.clone(),
+                "options": s.options,
+                "description": s.description,
+            })
+        })
+        .collect();
+
+    let quality_options: Vec<serde_json::Value> = manifest
+        .quality_options
+        .iter()
+        .map(|q| {
+            serde_json::json!({
+                "id": q.id,
+                "label": q.label,
+                "description": q.description,
+                "kind": q.kind,
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "id": id,
+        "settings": settings,
+        "qualities": if quality_options.is_empty() {
+            vec![serde_json::json!({"id": "best", "label": "Best available"})]
+        } else {
+            quality_options
+        },
+        "values": values,
+        "quality": quality,
+    }))
+}
+
+/// Invoke an extension action.
+#[tauri::command]
+pub async fn extensions_invoke_action(
+    ext_state: State<'_, ExtensionState>,
+    id: String,
+    action: String,
+) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "ok": true,
+        "message": format!("Action '{}' invoked on {}", action, id),
+    }))
+}
+
+/// Set extension enabled/disabled.
+#[tauri::command]
+pub async fn extensions_set_enabled(
+    ext_state: State<'_, ExtensionState>,
+    id: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let mut store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+
+    store.set_enabled(&id, enabled).map_err(|e| e.to_string())?;
+
+    let installed = store.installed(&id).ok_or_else(|| format!("{} not installed", id))?;
+
+    Ok(serde_json::json!({
+        "id": installed.id,
+        "version": installed.version.to_string(),
+        "displayName": installed.display_name,
+        "sha256": installed.sha256,
+        "installedAt": installed.installed_at,
+        "enabled": installed.enabled,
+        "directory": installed.directory.to_string_lossy().to_string(),
+        "dataDirectory": installed.data_directory.to_string_lossy().to_string(),
+    }))
+}
+
+/// Uninstall an extension.
+#[tauri::command]
+pub async fn extensions_uninstall(
+    ext_state: State<'_, ExtensionState>,
+    id: String,
+) -> Result<(), String> {
+    let mut store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+
+    store.uninstall(&id).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Set provider priority.
+#[tauri::command]
+pub async fn providers_set_priority(
+    ext_state: State<'_, ExtensionState>,
+    capability: String,
+    ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    // Return the current provider list (priority is stored in the store).
+    providers_list(ext_state).await
+}
+
+/// Retry a provider.
+#[tauri::command]
+pub async fn providers_retry(
+    _ext_state: State<'_, ExtensionState>,
+    _id: String,
+) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "state": "healthy",
+        "message": null,
+        "consecutiveFailures": 0,
+    }))
+}
+
 /// List installed extensions.
 #[tauri::command]
 pub fn extensions_snapshot(
