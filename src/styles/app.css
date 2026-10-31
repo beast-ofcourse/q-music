@@ -562,6 +562,20 @@ button.rail-label[aria-current="page"] {
   white-space: nowrap;
 }
 
+/* Glassmorphism theme: frosted glass surfaces */
+[data-theme="glass"] .view-head,
+[data-theme="glass"] .rail,
+[data-theme="glass"] .now,
+[data-theme="glass"] .transport {
+  background: rgba(10, 10, 20, 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+[data-theme="glass"] .view-body {
+  background: transparent;
+}
+
 /* ---------------------------------------------------------------- now panel --- */
 
 .now {

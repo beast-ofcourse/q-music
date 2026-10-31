@@ -27,7 +27,15 @@ import {
   type TrackQuery,
 } from "../lib/types";
 
-export type ThemeName = "carbon" | "paper" | "stage";
+export type ThemeName =
+  | "carbon"
+  | "paper"
+  | "stage"
+  | "apple"
+  | "glass"
+  | "catppuccin-mocha"
+  | "sky-catppuccin"
+  | "babypink-catppuccin";
 
 export type View =
   | { kind: "library" }
@@ -338,8 +346,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "playlists", playlists });
         dispatch({ type: "folders", folders });
         dispatch({ type: "devices", devices });
-        if (theme === "paper" || theme === "stage" || theme === "carbon") {
-          dispatch({ type: "theme", theme });
+        const validThemes = ["carbon", "paper", "stage", "apple", "glass", "catppuccin-mocha", "sky-catppuccin", "babypink-catppuccin"];
+        if (theme !== null && validThemes.includes(theme)) {
+          dispatch({ type: "theme", theme: theme as ThemeName });
         }
         const restoredEq = parseJson<EqSettings>(eq);
         if (restoredEq) dispatch({ type: "eq", eq: normalizeEq(restoredEq) });

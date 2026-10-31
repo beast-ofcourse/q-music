@@ -9,6 +9,11 @@ const THEMES: Array<{ value: ThemeName; label: string }> = [
   { value: "carbon", label: "Carbon — matte black, bone ink" },
   { value: "paper", label: "Paper — warm light" },
   { value: "stage", label: "Stage — blue black" },
+  { value: "apple", label: "Apple — clean light, blue accent" },
+  { value: "glass", label: "Glass — frosted dark, purple accent" },
+  { value: "catppuccin-mocha", label: "Catppuccin Mocha — warm dark" },
+  { value: "sky-catppuccin", label: "Sky blue + Catppuccin white" },
+  { value: "babypink-catppuccin", label: "Baby pink + Catppuccin white" },
 ];
 
 const SHORTCUTS: Array<{ keys: string; action: string }> = [

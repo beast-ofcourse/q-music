@@ -84,3 +84,88 @@
   --line-strong: rgba(228, 231, 238, 0.22);
   --shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.9);
 }
+
+/* ---- Apple inspired ---- */
+
+[data-theme="apple"] {
+  color-scheme: light;
+  --bg: #f5f5f7;
+  --bg-raised: #ffffff;
+  --bg-sunken: #e8e8ed;
+  --ink: #1d1d1f;
+  --ink-2: #424245;
+  --ink-3: #86868b;
+  --signal: #0071e3;
+  --signal-text: #0071e3;
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.16);
+  --shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.08);
+}
+
+/* ---- Glassmorphism ---- */
+
+[data-theme="glass"] {
+  color-scheme: dark;
+  --bg: #0a0a14;
+  --bg-raised: rgba(20, 20, 35, 0.6);
+  --bg-sunken: rgba(5, 5, 15, 0.8);
+  --ink: #e0e0e8;
+  --ink-2: #a0a0b0;
+  --ink-3: #606070;
+  --signal: #8b5cf6;
+  --signal-text: #a78bfa;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- Catppuccin Mocha ---- */
+
+[data-theme="catppuccin-mocha"] {
+  color-scheme: dark;
+  --bg: #1e1e2e;
+  --bg-raised: #313244;
+  --bg-sunken: #181825;
+  --ink: #cdd6f4;
+  --ink-2: #bac2de;
+  --ink-3: #a6adc8;
+  --signal: #f38ba8;
+  --signal-text: #f38ba8;
+  --line: rgba(205, 214, 244, 0.1);
+  --line-strong: rgba(205, 214, 244, 0.2);
+  --shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.85);
+}
+
+/* ---- Sky blue + Catppuccin white ---- */
+
+[data-theme="sky-catppuccin"] {
+  color-scheme: light;
+  --bg: #eff1f5;
+  --bg-raised: #e6e9ef;
+  --bg-sunken: #dce0e8;
+  --ink: #4c4f69;
+  --ink-2: #5c5f77;
+  --ink-3: #6c6f85;
+  --signal: #04a5e5;
+  --signal-text: #04a5e5;
+  --line: rgba(76, 79, 105, 0.14);
+  --line-strong: rgba(76, 79, 105, 0.28);
+  --shadow: 0 18px 40px -20px rgba(76, 79, 105, 0.4);
+}
+
+/* ---- Babypink + Catppuccin white ---- */
+
+[data-theme="babypink-catppuccin"] {
+  color-scheme: light;
+  --bg: #eff1f5;
+  --bg-raised: #e6e9ef;
+  --bg-sunken: #dce0e8;
+  --ink: #4c4f69;
+  --ink-2: #5c5f77;
+  --ink-3: #6c6f85;
+  --signal: #ea76cb;
+  --signal-text: #ea76cb;
+  --line: rgba(76, 79, 105, 0.14);
+  --line-strong: rgba(76, 79, 105, 0.28);
+  --shadow: 0 18px 40px -20px rgba(76, 79, 105, 0.4);
+}
