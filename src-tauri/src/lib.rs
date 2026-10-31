@@ -77,6 +77,11 @@ pub fn run() {
             ext_commands::extensions_snapshot,
             ext_commands::extensions_install_file,
             ext_commands::search_providers,
+            ext_commands::providers_list,
+            ext_commands::queue_jobs,
+            ext_commands::queue_cancel,
+            ext_commands::queue_retry,
+            ext_commands::queue_enqueue,
         ])
         .setup(|app| {
             let root = AppPaths::resolve().data_dir;

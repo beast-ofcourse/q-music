@@ -201,6 +201,156 @@ pub async fn search_providers(
     Ok(serde_json::json!(outcomes))
 }
 
+/// List installed providers grouped by capability.
+#[tauri::command]
+pub async fn providers_list(
+    ext_state: State<'_, ExtensionState>,
+) -> Result<serde_json::Value, String> {
+    let mut store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+
+    let scan = store.scan();
+    let capabilities = ["metadata", "download", "lyrics"];
+
+    let mut groups: Vec<serde_json::Value> = Vec::new();
+
+    for cap in &capabilities {
+        let mut providers: Vec<serde_json::Value> = Vec::new();
+
+        for installed in &scan.installed {
+            if !installed.enabled {
+                continue;
+            }
+
+            // Check if this extension provides this capability.
+            // Read the manifest to check the "type" field.
+            let manifest_text = std::fs::read_to_string(installed.manifest_path()).ok();
+            let manifest: Option<qext::manifest::Manifest> =
+                manifest_text.and_then(|t| serde_json::from_str(&t).ok());
+
+            let provides = manifest
+                .as_ref()
+                .map(|m| m.kinds.iter().any(|k| {
+                    match *cap {
+                        "metadata" => k == "metadata_provider",
+                        "download" => k == "download_provider",
+                        "lyrics" => k == "lyrics_provider",
+                        _ => false,
+                    }
+                }))
+                .unwrap_or(false);
+
+            if !provides {
+                continue;
+            }
+
+            // Activate if not already active.
+            if !store.is_active(&installed.id) {
+                let allowlist = manifest
+                    .as_ref()
+                    .map(|m| {
+                        qext::runtime::permissions::NetworkAllowlist::from_patterns(
+                            &m.permissions.network,
+                        )
+                    })
+                    .unwrap_or_default();
+                let http = qext::runtime::http::HostHttp::new(
+                    allowlist,
+                    qext::runtime::http::HttpLimits::default(),
+                );
+                let config = qext::runtime::polyfills::HostConfig {
+                    app_version: "4.10.0".to_string(),
+                    user_agent: "Q-Music/0.1.1".to_string(),
+                    data_dir: Some(ext_state.root.join(".data").join(&installed.id)),
+                    http: Some(http),
+                    ffmpeg: None,
+                };
+                let host = Arc::new(qext::runtime::polyfills::HostServices::new(config));
+                let _ = store.activate(&installed.id, host);
+            }
+
+            providers.push(serde_json::json!({
+                "id": installed.id,
+                "displayName": installed.display_name.clone().unwrap_or_else(|| installed.id.clone()),
+                "capability": cap,
+                "version": installed.version.to_string(),
+                "enabled": installed.enabled,
+                "quality": "best",
+                "qualities": [],
+                "health": {
+                    "state": "healthy",
+                    "message": null,
+                    "consecutiveFailures": 0,
+                },
+                "missingFeatures": [],
+            }));
+        }
+
+        groups.push(serde_json::json!({
+            "capability": cap,
+            "providers": providers,
+        }));
+    }
+
+    Ok(serde_json::json!(groups))
+}
+
+/// List download queue jobs.
+#[tauri::command]
+pub fn queue_jobs(
+    _ext_state: State<'_, ExtensionState>,
+) -> Result<serde_json::Value, String> {
+    // The download queue in the desktop app is simpler than the demo.
+    // Return an empty list for now — jobs are managed by the store.
+    Ok(serde_json::json!([]))
+}
+
+/// Cancel a download job.
+#[tauri::command]
+pub fn queue_cancel(
+    _ext_state: State<'_, ExtensionState>,
+    _job_id: String,
+) -> Result<(), String> {
+    Ok(())
+}
+
+/// Retry a failed download job.
+#[tauri::command]
+pub fn queue_retry(
+    _ext_state: State<'_, ExtensionState>,
+    _job_id: String,
+) -> Result<(), String> {
+    Ok(())
+}
+
+/// Enqueue a download from a provider track.
+#[tauri::command]
+pub fn queue_enqueue(
+    _ext_state: State<'_, ExtensionState>,
+    track: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    // Return a synthetic job for now.
+    let job = serde_json::json!({
+        "id": format!("job-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+        "trackId": track.get("providerTrackId").and_then(|v| v.as_str()).unwrap_or(""),
+        "title": track.get("title").and_then(|v| v.as_str()).unwrap_or(""),
+        "artist": track.get("artist").and_then(|v| v.as_str()).unwrap_or(""),
+        "provider": track.get("provider").and_then(|v| v.as_str()).unwrap_or(""),
+        "quality": track.get("quality").and_then(|v| v.as_str()).unwrap_or("best"),
+        "stage": "queued",
+        "percent": 0,
+        "bytesWritten": 0,
+        "bytesTotal": null,
+        "speedBps": null,
+        "outputPath": "",
+        "failure": null,
+        "updatedAt": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as i64,
+    });
+    Ok(job)
+}
+
 /// List installed extensions.
 #[tauri::command]
 pub fn extensions_snapshot(
