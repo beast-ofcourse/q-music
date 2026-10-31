@@ -122,7 +122,7 @@ export function LyricsView() {
 
   return (
     <div className="lyrics-view">
-      {/* Blurred artwork background */}
+      {/* Subtle artwork background */}
       {artwork && (
         <div
           className="lyrics-view-bg"

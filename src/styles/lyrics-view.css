@@ -1,6 +1,5 @@
 /* Full-screen synced lyrics view.
-   Clean, premium, readable: dark background, clear typography,
-   active line highlighted. No glassmorphism, no excessive blur. */
+   Clean, big, centered, high-contrast. No overlays, no blur, no gradients. */
 
 .lyrics-view {
   position: relative;
@@ -9,17 +8,6 @@
   display: flex;
   flex-direction: column;
   background: var(--bg);
-}
-
-/* Blurred artwork background — behind everything, dimmed */
-.lyrics-view-bg {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center;
-  filter: blur(40px) brightness(0.2) saturate(1.3);
-  transform: scale(1.1);
-  z-index: 0;
 }
 
 /* Close button */
@@ -99,44 +87,44 @@
   flex-shrink: 0;
 }
 
-/* Lyric lines */
+/* Lyric lines — centered, big, readable */
 .lyrics-view-line {
   display: block;
   width: 100%;
-  max-width: 36rem;
-  text-align: left;
+  max-width: 48rem;
+  text-align: center;
+  margin: 0 auto;
   background: none;
   border: none;
-  padding: var(--space-2) 0;
-  margin: 0;
-  font-size: 20px;
+  padding: var(--space-3) 0;
+  font-size: 26px;
   font-weight: 400;
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--ink-2);
-  opacity: 0.6;
-  transition: color 250ms var(--ease-out), opacity 250ms var(--ease-out), font-size 250ms var(--ease-out);
+  opacity: 0.7;
+  transition: color 200ms var(--ease-out), opacity 200ms var(--ease-out), font-size 200ms var(--ease-out);
   cursor: pointer;
 }
 
 .lyrics-view-line[data-active="true"] {
   color: var(--ink);
   opacity: 1;
-  font-size: 26px;
+  font-size: 34px;
   font-weight: 600;
 }
 
 .lyrics-view-line[data-past="true"] {
   color: var(--ink-2);
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 .lyrics-view-line[data-future="true"] {
   color: var(--ink-3);
-  opacity: 0.35;
+  opacity: 0.4;
 }
 
 .lyrics-view-line:hover:not(:disabled) {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .lyrics-view-line:disabled {
@@ -224,10 +212,10 @@
 /* Responsive */
 @media (max-width: 959px) {
   .lyrics-view-line {
-    font-size: 16px;
+    font-size: 20px;
   }
   .lyrics-view-line[data-active="true"] {
-    font-size: 20px;
+    font-size: 26px;
   }
   .lyrics-view-track {
     padding: var(--space-4) var(--space-4) var(--space-2);
