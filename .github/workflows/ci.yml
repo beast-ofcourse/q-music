@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  rust:
+    name: Rust (qext + qcore)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/qext crates/qcore src-tauri
+      - name: Test qext
+        run: cargo test --manifest-path crates/qext/Cargo.toml
+      - name: Test qext (real-packages)
+        run: cargo test --manifest-path crates/qext/Cargo.toml --features real-packages
+      - name: Test qcore
+        run: cargo test --manifest-path crates/qcore/Cargo.toml
+      - name: Clippy
+        run: cargo clippy --manifest-path crates/qext/Cargo.toml --all-targets -- -D warnings
+      - name: Check src-tauri
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+  frontend:
+    name: Frontend (TypeScript + Vite)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Build
+        run: npx vite build
+
+  release:
+    name: Build Tauri app
+    needs: [rust, frontend]
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Q-Music ${{ github.ref_name }}"
+          releaseBody: "See [EXTENSIONS.md](EXTENSIONS.md) and [SECURITY.md](SECURITY.md) for details."
+          releaseDraft: false
+          prerelease: false
