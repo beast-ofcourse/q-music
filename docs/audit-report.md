@@ -240,11 +240,28 @@ implements `file.download` / `file.downloadSegments` natively through the `qext`
 transfer engine, so packages stream real bytes with resume, headers, progress
 and cancellation.
 
+Phase 1–4 additions (2026-10): HTTP timeout aligned to the documented 30 s;
+`DownloadFailureKind` gained the six documented `error_type` codes (geo_blocked,
+stream_error, format_error, quota_exceeded, premium_required, server_error);
+`skipBuiltInFallback` is now parsed; the desktop download worker runs
+`enrichTrack` before download and merges the result into request metadata and
+ISRC; `postProcess`/`postProcessV2` are dispatched for enabled hooks after a
+successful download; `extensions_handle_url`, `provider_home_feed` and
+`provider_browse_categories` commands are registered. `matchTrack` remains
+available via `Calls::match_track` (no desktop caller needed — track ids arrive
+from search results). Phase 4: `credentials.*` (encrypted via AES-GCM through
+`utils.encrypt/decrypt`), `ffmpeg.getInfo` (probe via ffmpeg -i), and
+`gobackend.getAudioQuality` (delegates to ffmpeg.getInfo) are now implemented.
+`auth.*` (OAuth/PKCE) and `gobackend.getLyricsLRC`/`checkISRCExists` remain
+unavailable — auth requires desktop deep-link callback infrastructure.
+
 Still open:
 
 - `extensions_invoke_action` verifies the extension exists but has no
   package-side counterpart to dispatch to (the manifest format defines no named
   actions) — recorded here as the one command without real behaviour.
+- Frontend wiring for handleUrl route and home-feed screen (backend commands
+  registered; UI not yet connected).
 
 
 ## Phase 6 — UI/UX Consistency Audit
@@ -375,7 +392,7 @@ The application is in good shape. Core music player functionality is solid. The 
 
 ### Overall Test Results
 
-- `qext`: 273 lib tests + 6 real-package tests passed
+- `qext`: 286 lib tests + 6 real-package tests passed
 - `qcore`: 49 tests passed
 - Frontend: TypeScript 0 errors, Vite build success
 - Total: 328 tests, all passing

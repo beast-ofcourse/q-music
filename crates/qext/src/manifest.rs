@@ -77,6 +77,9 @@ pub struct Manifest {
     #[serde(default)]
     pub skip_metadata_enrichment: bool,
 
+    #[serde(default, rename = "skipBuiltInFallback")]
+    pub skip_built_in_fallback: bool,
+
     /// Host capabilities the package needs, e.g. `signedSession@3`.
     #[serde(default)]
     pub required_runtime_features: Vec<String>,
@@ -553,6 +556,26 @@ mod tests {
             Some("hi_res")
         );
         assert_eq!(manifest.settings.len(), 1);
+    }
+
+    #[test]
+    fn parses_skip_built_in_fallback_when_present() {
+        let json = r#"{
+            "name": "x",
+            "displayName": "X",
+            "version": "1.0.0",
+            "description": "d",
+            "author": "a",
+            "permissions": { "network": [] },
+            "type": ["metadata_provider"],
+            "skipBuiltInFallback": true
+        }"#;
+        let manifest = Manifest::parse(json).expect("parses");
+        assert!(manifest.skip_built_in_fallback);
+        // Default is false when absent.
+        let json2 = json.replace(",\n            \"skipBuiltInFallback\": true", "");
+        let manifest2 = Manifest::parse(&json2).expect("parses");
+        assert!(!manifest2.skip_built_in_fallback);
     }
 
     #[test]

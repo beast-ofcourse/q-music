@@ -10,11 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/beast-ofcourse/q-music/releases/tag/v0.1.0">
-    <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version" />
+  <a href="https://github.com/beast-ofcourse/q-music/releases/tag/v0.2.0">
+    <img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat-square" alt="Version" />
   </a>
-  <a href="https://github.com/beast-ofcourse/q-music/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/beast-ofcourse/q-music/ci.yml?style=flat-square&label=CI" alt="CI" />
+  <a href="https://github.com/beast-ofcourse/q-music/actions">    <img src="https://img.shields.io/github/actions/workflow/status/beast-ofcourse/q-music/ci.yml?style=flat-square&label=CI" alt="CI" />
   </a>
   <img src="https://img.shields.io/badge/rust-1.85%2B-orange?style=flat-square" alt="Rust" />
   <img src="https://img.shields.io/badge/tauri-2.x-blue?style=flat-square" alt="Tauri" />

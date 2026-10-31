@@ -5,15 +5,19 @@ import { NowPanel } from "./components/NowPanel";
 import { Rail } from "./components/Rail";
 import { Toast } from "./components/Toast";
 import { Transport } from "./components/Transport";
+import { backend } from "./lib/ipc";
 import { REPEAT_CYCLE } from "./lib/playback";
 import { useStore, type View } from "./state/store";
 import { BrowseView } from "./views/BrowseView";
+import { BrowseCategoriesView } from "./views/BrowseCategoriesView";
 import { EditorView } from "./views/EditorView";
 import { EqView } from "./views/EqView";
 import { ExtensionsView } from "./views/ExtensionsView";
 import { FoldersView } from "./views/FoldersView";
+import { HomeFeedView } from "./views/HomeFeedView";
 import { HomeView } from "./views/HomeView";
 import { PlaylistsView } from "./views/PlaylistsView";
+import { ResolvedView } from "./views/ResolvedView";
 import { SettingsView } from "./views/SettingsView";
 import { TrackListView } from "./views/TrackListView";
 import { LyricsView } from "./views/LyricsView";
@@ -51,6 +55,12 @@ function MainView({ view }: { view: View }) {
       return <EditorView />;
     case "lyrics-view":
       return <LyricsView />;
+    case "provider-home-feed":
+      return <HomeFeedView />;
+    case "provider-browse-categories":
+      return <BrowseCategoriesView />;
+    case "resolved":
+      return <ResolvedView />;
   }
 }
 
@@ -86,6 +96,7 @@ export function App() {
     setRepeat,
     closeNow,
     setView,
+    notify,
   } = useStore();
 
   // The listener is attached once; the ref carries the current closure so the handler
@@ -156,6 +167,31 @@ export function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    async function handlePaste(event: ClipboardEvent) {
+      const text = event.clipboardData?.getData("text")?.trim();
+      if (!text || !/^https?:\/\//i.test(text)) return;
+      event.preventDefault();
+      try {
+        const raw = await backend.handleUrl(text);
+        if (!raw || !raw.item) {
+          notify("No provider could resolve that link.", "error");
+          return;
+        }
+        const entityType =
+          raw.item.type ??
+          (raw.item.track ? "track" : raw.item.album ? "album" : raw.item.artist ? "artist" : raw.item.playlist ? "playlist" : "unknown");
+        const item =
+          raw.item.track ?? raw.item.album ?? raw.item.artist ?? raw.item.playlist ?? raw.item;
+        setView({ kind: "resolved", provider: raw.provider ?? "provider", entityType, item });
+      } catch (error) {
+        notify(error instanceof Error ? error.message : String(error), "error");
+      }
+    }
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [notify, setView]);
 
   return (
     <div className="app" data-now-open={nowOpen}>

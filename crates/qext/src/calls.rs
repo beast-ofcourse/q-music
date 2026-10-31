@@ -89,14 +89,14 @@ impl SearchResults {
 }
 
 /// One result plus the provider that produced it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Resolved<T> {
     pub provider: String,
     pub item: T,
 }
 
 /// What `handleUrl` resolved a link to.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ResolvedLink {
     Track(Box<Track>),
     Album(Box<Album>),
@@ -454,6 +454,37 @@ impl<'a> Calls<'a> {
         })?;
         let value = self.call_required("enrichTrack", &[metadata])?;
         self.resolve(value, "enrichTrack", adapter::track_from_value)
+    }
+
+    /// Post-process a finished file. Prefers `postProcessV2` (SAF-aware input)
+    /// when the package implements it, falling back to `postProcess`.
+    pub fn post_process(
+        &mut self,
+        input: &serde_json::Value,
+        metadata: &serde_json::Value,
+        hook_id: &str,
+    ) -> Result<Option<Resolved<serde_json::Value>>, CallError> {
+        let function = if self.capabilities.has("postProcessV2") {
+            "postProcessV2"
+        } else if self.capabilities.has("postProcess") {
+            "postProcess"
+        } else {
+            return Err(self.unsupported("postProcess"));
+        };
+        let args = if function == "postProcessV2" {
+            vec![input.clone(), metadata.clone(), serde_json::json!(hook_id)]
+        } else {
+            // postProcess(filePath, metadata, hookId)
+            let path = input.get("path").cloned().unwrap_or(serde_json::Value::Null);
+            vec![path, metadata.clone(), serde_json::json!(hook_id)]
+        };
+        let Some(value) = self.call_required(function, &args)? else {
+            return Ok(None);
+        };
+        Ok(Some(Resolved {
+            provider: self.provider.to_string(),
+            item: value,
+        }))
     }
 
     pub fn match_track(

@@ -27,7 +27,8 @@ function saveRecent(list: string[]) {
 }
 
 export function HomeView() {
-  const { query, setQuery } = useStore();
+  const { query, setQuery, setView, notify } = useStore();
+  const [urlInput, setUrlInput] = useState("");
   const [filter, setFilter] = useState("all");
   const [recentSearches, setRecentSearches] = useState<string[]>(loadRecent);
   const [home, setHome] = useState<any>(null);
@@ -53,12 +54,58 @@ export function HomeView() {
     setQuery({ search: q });
   }
 
+  async function resolveUrl(url: string) {
+    try {
+      const raw = await backend.handleUrl(url);
+      if (!raw || !raw.item) {
+        notify("No provider could resolve that link.", "error");
+        return;
+      }
+      const entityType =
+        raw.item.type ??
+        (raw.item.track ? "track" : raw.item.album ? "album" : raw.item.artist ? "artist" : raw.item.playlist ? "playlist" : "unknown");
+      const item =
+        raw.item.track ?? raw.item.album ?? raw.item.artist ?? raw.item.playlist ?? raw.item;
+      setView({ kind: "resolved", provider: raw.provider ?? "provider", entityType, item });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
+
   return (
     <div className="home-view" style={{ padding: "24px", overflow: "auto", height: "100%" }}>
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 28, margin: 0 }}>Home</h1>
         <p style={{ opacity: 0.7, marginTop: 4 }}>Search across your online providers.</p>
       </header>
+
+      <div className="url-paste" style={{ maxWidth: 720, marginBottom: 16, display: "flex", gap: 8 }}>
+        <input
+          type="url"
+          placeholder="Paste a link to a track, album, or artist..."
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData("text").trim();
+            if (/^https?:\/\//i.test(text)) {
+              e.preventDefault();
+              setUrlInput(text);
+              void resolveUrl(text);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && urlInput.trim()) void resolveUrl(urlInput.trim());
+          }}
+          style={{ flex: 1, padding: "12px 16px", fontSize: 16, borderRadius: 8 }}
+        />
+        <button
+          type="button"
+          className="button"
+          onClick={() => urlInput.trim() && void resolveUrl(urlInput.trim())}
+        >
+          Open
+        </button>
+      </div>
 
       <div className="search" style={{ maxWidth: 720, marginBottom: 16 }}>
         <input

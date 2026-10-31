@@ -90,10 +90,9 @@ fn main() {
         );
         let host = Arc::new(HostServices::new(HostConfig {
             app_version: "4.10.0".to_string(),
-            user_agent: "Q-Music/0.1.0".to_string(),
+            user_agent: "Q-Music/0.2.0".to_string(),
             data_dir: Some(root.join(".data").join(&installed.id)),
-            http: Some(http),
-            ffmpeg: None,
+            http: Some(http),            ffmpeg: None,
         }));
 
         if let Err(error) = store.activate(&installed.id, host) {

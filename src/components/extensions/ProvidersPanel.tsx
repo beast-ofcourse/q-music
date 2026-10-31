@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { backend } from "../../lib/ipc";
+import { useStore } from "../../state/store";
 import {
   toExtensionFailure,
   type ProviderCapability,
@@ -43,6 +44,7 @@ function withProvider(
 }
 
 export function ProvidersPanel() {
+  const { setView } = useStore();
   const [groups, setGroups] = useState<ProviderGroup[] | null>(null);
   const [readFailure, setReadFailure] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -288,6 +290,8 @@ export function ProvidersPanel() {
                         notice={noticeById[provider.id]}
                         onMove={(direction) => void move(group.capability, provider.id, direction)}
                         onRetry={() => void retry(provider.id)}
+                        onHomeFeed={() => setView({ kind: "provider-home-feed", id: provider.id })}
+                        onBrowse={() => setView({ kind: "provider-browse-categories", id: provider.id })}
                         register={(element) => registerRow(provider.id, element)}
                       />
                     ))}

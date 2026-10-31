@@ -392,6 +392,13 @@ fn manifest_of(installed: &qext::store::InstalledExtension) -> Option<qext::mani
     serde_json::from_str(&text).ok()
 }
 
+/// Read a provider's manifest from the store, or None if not installed.
+fn provider_manifest(state: &ExtensionState, id: &str) -> Option<qext::manifest::Manifest> {
+    let store = state.store.lock().ok()?;
+    let installed = store.installed(id)?;
+    manifest_of(&installed)
+}
+
 // ---------------------------------------------------------------------------
 // Extension lifecycle commands
 // ---------------------------------------------------------------------------
@@ -1089,7 +1096,7 @@ pub async fn provider_lyrics(
                 artist_name: String::new(),
                 album_name: None,
                 duration_seconds: None,
-                extra: std::collections::BTreeMap::new(),
+                extra: BTreeMap::new(),
             };
             let lyrics = calls
                 .lyrics(&request)
@@ -1135,6 +1142,146 @@ pub async fn provider_lyrics(
     }
 
     Ok(serde_json::json!(null))
+}
+
+// ---------------------------------------------------------------------------
+// Provider metadata commands (handleUrl, home feed, browse categories)
+// ---------------------------------------------------------------------------
+
+/// Resolve a URL through the first installed provider that implements handleUrl.
+#[tauri::command]
+pub async fn extensions_handle_url(
+    ext_state: State<'_, ExtensionState>,
+    url: String,
+) -> Result<serde_json::Value, String> {
+    let scan = {
+        let store = ext_state
+            .store
+            .lock()
+            .map_err(|_| "extension store poisoned".to_string())?;
+        store.scan()
+    };
+
+    for installed in &scan.installed {
+        if !installed.enabled {
+            continue;
+        }
+        let Some(manifest) = manifest_of(installed) else {
+            continue;
+        };
+        if !manifest_provides(&manifest, "metadata") {
+            continue;
+        }
+        if provider_is_unhealthy(&ext_state, &installed.id) {
+            continue;
+        }
+
+        let _ = ensure_runtime(&ext_state, &installed.id);
+        let store = ext_state
+            .store
+            .lock()
+            .map_err(|_| "extension store poisoned".to_string())?;
+        let result = store.with_runtime(&installed.id, |runtime| {
+            let capabilities = qext::adapter::Capabilities::from_runtime(runtime);
+            if !capabilities.has("handleUrl") {
+                return Ok(None);
+            }
+            let mut cache = qext::calls::CallCache::open_in_memory(0)
+                .map_err(|error| error.to_string())?;
+            let mut calls = qext::calls::Calls::new(&installed.id, runtime, &mut cache);
+            calls.handle_url(&url).map_err(|error| error.to_string())
+        });
+        drop(store);
+
+        match result {
+            Some(Ok(Some(resolved))) => {
+                clear_provider_failure(&ext_state, &installed.id);
+                return Ok(serde_json::to_value(resolved).unwrap_or(serde_json::json!(null)));
+            }
+            Some(Ok(None)) => {}
+            Some(Err(message)) => {
+                record_provider_failure(&ext_state, &installed.id, &message);
+            }
+            None => {}
+        }
+    }
+
+    Ok(serde_json::json!(null))
+}
+
+/// Fetch a provider's home feed (only meaningful when the manifest declares
+/// `capabilities.homeFeed`).
+#[tauri::command]
+pub async fn provider_home_feed(
+    ext_state: State<'_, ExtensionState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let _ = ensure_runtime(&ext_state, &id);
+    let store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+    let result = store.with_runtime(&id, |runtime| {
+        let capabilities = qext::adapter::Capabilities::from_runtime(runtime);
+        if !capabilities.has("getHomeFeed") {
+            return Ok(None);
+        }
+        let mut cache = qext::calls::CallCache::open_in_memory(0)
+            .map_err(|error| error.to_string())?;
+        let mut calls = qext::calls::Calls::new(&id, runtime, &mut cache);
+        calls.home_feed().map_err(|error| error.to_string())
+    });
+    drop(store);
+
+    match result {
+        Some(Ok(Some(resolved))) => {
+            clear_provider_failure(&ext_state, &id);
+            Ok(serde_json::to_value(resolved).unwrap_or(serde_json::json!(null)))
+        }
+        Some(Ok(None)) => Ok(serde_json::json!(null)),
+        Some(Err(message)) => {
+            record_provider_failure(&ext_state, &id, &message);
+            Err(message)
+        }
+        None => Err("provider is not active".to_string()),
+    }
+}
+
+/// Fetch a provider's browse categories.
+#[tauri::command]
+pub async fn provider_browse_categories(
+    ext_state: State<'_, ExtensionState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let _ = ensure_runtime(&ext_state, &id);
+    let store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+    let result = store.with_runtime(&id, |runtime| {
+        let capabilities = qext::adapter::Capabilities::from_runtime(runtime);
+        if !capabilities.has("getBrowseCategories") {
+            return Ok(None);
+        }
+        let mut cache = qext::calls::CallCache::open_in_memory(0)
+            .map_err(|error| error.to_string())?;
+        let mut calls = qext::calls::Calls::new(&id, runtime, &mut cache);
+        calls.browse_categories().map_err(|error| error.to_string())
+    });
+    drop(store);
+
+    match result {
+        Some(Ok(Some(resolved))) => {
+            clear_provider_failure(&ext_state, &id);
+            Ok(serde_json::to_value(resolved).unwrap_or(serde_json::json!(null)))
+        }
+        Some(Ok(None)) => Ok(serde_json::json!(null)),
+        Some(Err(message)) => {
+            record_provider_failure(&ext_state, &id, &message);
+            Err(message)
+        }
+        None => Err("provider is not active".to_string()),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1379,6 +1526,61 @@ fn run_job(app: &AppHandle, state: &ExtensionState, job_id: &str) {
         }
     };
 
+    // Optional enrichment: a package that implements `enrichTrack` gets a chance
+    // to refine metadata (ISRC, tidal_id, qobuz_id, deezer_id, external_links)
+    // before the download starts. Failures here must not abort the download —
+    // enrichment is an optimisation, not a requirement.
+    let mut enriched_metadata: Option<serde_json::Value> = None;
+    let mut enriched_track_id = track_id.to_string();
+    let mut enriched_isrc: Option<String> = None;
+    {
+        let capabilities = qext::adapter::Capabilities::from_runtime(&runtime);
+        if capabilities.has("enrichTrack") {
+            let artist = text_field(&job, "artist");
+            let title = text_field(&job, "title");
+            let album = text_field(&job, "album");
+            let duration_ms = job
+                .get("durationMs")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0);
+            let art_url = job.get("artUrl").and_then(|value| value.as_str()).map(String::from);
+            let mut images = qext::contract::OneOrMany::default();
+            if let Some(url) = art_url {
+                images.0.push(url);
+            }
+            let track = qext::contract::Track {
+                id: track_id.to_string(),
+                name: title.clone(),
+                artists: qext::contract::OneOrMany(vec![artist.clone()]),
+                album_name: if album.is_empty() { None } else { Some(album.clone()) },
+                album_artist: None,
+                isrc: None,
+                duration_ms,
+                track_number: None,
+                disc_number: None,
+                release_date: None,
+                images,
+                extra: BTreeMap::new(),
+            };
+
+            let mut cache = qext::calls::CallCache::open_in_memory(0).ok();
+            let resolved = cache.as_mut().and_then(|cache| {
+                let mut calls = qext::calls::Calls::new(provider, &runtime, cache);
+                calls.enrich(&track).ok().flatten()
+            });
+            if let Some(resolved) = resolved {
+                let enriched_track = resolved.item;
+                enriched_metadata = serde_json::to_value(&enriched_track).ok();
+                if !enriched_track.id.is_empty() {
+                    enriched_track_id = enriched_track.id.clone();
+                }
+                enriched_isrc = enriched_track.isrc.clone();
+            }
+        }
+    }
+
+    let track_id = enriched_track_id;
+
     start_progress_watcher(app, job_id.to_string(), host.clone());
     set_stage(state, job_id, "downloading");
 
@@ -1394,13 +1596,27 @@ fn run_job(app: &AppHandle, state: &ExtensionState, job_id: &str) {
     );
     let staged_path = work_dir.join(&staged_name);
 
+    let request_metadata = enriched_metadata.unwrap_or_else(|| job.clone());
+
     let request = qext::adapter::DownloadRequest::new(
         track_id,
         quality,
         staged_path.to_string_lossy(),
     )
     .with_names(text_field(&job, "title"), text_field(&job, "artist"))
-    .with_metadata(job.clone());
+    .with_metadata(request_metadata);
+
+    let request = if let Some(isrc) = enriched_isrc.or_else(|| job.get("isrc").and_then(|value| value.as_str()).map(String::from)) {
+        request.with_isrc(isrc)
+    } else {
+        request
+    };
+
+    let request = if let Some(isrc) = job.get("isrc").and_then(|value| value.as_str()) {
+        request.with_isrc(isrc)
+    } else {
+        request
+    };
 
     let outcome = adapter::download(&runtime, &request);
 
@@ -1454,8 +1670,55 @@ fn run_job(app: &AppHandle, state: &ExtensionState, job_id: &str) {
         return;
     }
 
+    // Optional post-processing: a package that declares `postProcessing` hooks
+    // gets a chance to transform the finished file (convert format, normalise
+    // audio, ...). Failures here do not discard the downloaded file.
+    if let Some(manifest) = provider_manifest(state, provider) {
+        if manifest.post_processing.as_ref().is_some_and(|pp| pp.is_active()) {
+            let capabilities = qext::adapter::Capabilities::from_runtime(&runtime);
+            if capabilities.has("postProcess") || capabilities.has("postProcessV2") {
+                let ext = final_path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                if let Some(pp) = manifest.post_processing.as_ref() {
+                    for hook in &pp.hooks {
+                        if !hook.default_enabled {
+                            continue;
+                        }
+                        if !hook.supported_formats.is_empty()
+                            && !hook.supported_formats.iter().any(|format| format.eq_ignore_ascii_case(&ext))
+                        {
+                            continue;
+                        }
+                        let input = serde_json::json!({
+                            "path": final_path.to_string_lossy(),
+                            "name": final_path.file_name().map(|value| value.to_string_lossy().to_string()).unwrap_or_default(),
+                            "mime_type": "",
+                            "size": std::fs::metadata(&final_path).map(|entry| entry.len()).unwrap_or(0),
+                            "is_saf": false,
+                        });
+                        let metadata = job.clone();
+                        let mut cache = qext::calls::CallCache::open_in_memory(0).ok();
+                        if let Some(cache) = cache.as_mut() {
+                            let mut calls = qext::calls::Calls::new(provider, &runtime, cache);
+                            if let Ok(Some(resolved)) = calls.post_process(&input, &metadata, &hook.id) {
+                                if let Some(new_path) = resolved.item.get("new_file_path").and_then(|value| value.as_str()) {
+                                    let new_path = std::path::PathBuf::from(new_path);
+                                    if new_path != final_path && new_path.exists() {
+                                        let _ = std::fs::rename(&new_path, &final_path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let spec = qcore::embed::EmbedSpec {
-        title: Some(text_field(&job, "title")),
         artist: Some(text_field(&job, "artist")),
         album: Some(text_field(&job, "album")),
         ..qcore::embed::EmbedSpec::default()

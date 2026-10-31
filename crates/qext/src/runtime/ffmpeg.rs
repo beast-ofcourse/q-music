@@ -124,8 +124,55 @@ impl Ffmpeg {
         }
     }
 
-    pub fn binary(&self) -> &Path {
-        &self.binary
+    pub fn info(&self, path: &str) -> Result<FfmpegInfo, FfmpegError> {
+        if path.trim().is_empty() {
+            return Err(FfmpegError::InvalidArguments {
+                reason: "input path is required".to_string(),
+            });
+        }
+        let mut child = Command::new(&self.binary)
+            .args(["-hide_banner", "-i", path])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| FfmpegError::Spawn {
+                message: format!("{}: {error}", self.binary.display()),
+            })?;
+
+        let stderr = child.stderr.take().ok_or_else(|| FfmpegError::Spawn {
+            message: "ffmpeg stderr was not captured".to_string(),
+        })?;
+        let limit = self.limits.max_output_bytes;
+        let reader = thread::spawn(move || read_tail(stderr, limit));
+
+        let started = Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    let output = join_output(reader);
+                    return parse_ffmpeg_info(&output);
+                }
+                Ok(None) => {
+                    if started.elapsed() >= self.limits.timeout {
+                        stop(&mut child);
+                        let output = join_output(reader);
+                        return Err(FfmpegError::Timeout {
+                            seconds: self.limits.timeout.as_secs(),
+                            message: output,
+                        });
+                    }
+                    thread::sleep(POLL_INTERVAL);
+                }
+                Err(error) => {
+                    stop(&mut child);
+                    let _ = reader.join();
+                    return Err(FfmpegError::Spawn {
+                        message: format!("cannot read ffmpeg status: {error}"),
+                    });
+                }
+            }
+        }
     }
 
     /// Run one raw argument string, e.g. `-i "in.flac" -af loudnorm -y "out.flac"`.
@@ -552,4 +599,89 @@ mod tests {
         assert!(matches!(error, FfmpegError::Exit { .. }), "{error:?}");
         assert!(!error.message().is_empty());
     }
+}
+
+/// Probe result returned by [`Ffmpeg::info`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct FfmpegInfo {
+    pub bit_depth: u32,
+    pub sample_rate: u32,
+    pub duration_seconds: f64,
+}
+
+/// Parse ffmpeg's stderr probe output. Returns the first audio stream's
+/// parameters and the container duration.
+pub fn parse_ffmpeg_info(text: &str) -> Result<FfmpegInfo, FfmpegError> {
+    let mut duration_seconds = 0.0f64;
+    let mut sample_rate = 0u32;
+    let mut bit_depth = 0u32;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("Duration:") {
+            // "Duration: 00:03:00.00, start: ..."
+            let time_part = rest.split(',').next().unwrap_or("").trim();
+            if let Some(seconds) = parse_duration(time_part) {
+                duration_seconds = seconds;
+            }
+        }
+        if trimmed.contains("Audio:") {
+            // "... Audio: flac, 44100 Hz, stereo, s16, 1000 kb/s"
+            for token in trimmed.split([',', ' ']) {
+                let token = token.trim();
+                if let Some(rate) = token.strip_suffix("Hz") {
+                    if let Ok(value) = rate.trim().parse::<u32>() {
+                        if value > 0 && sample_rate == 0 {
+                            sample_rate = value;
+                        }
+                    }
+                }
+                // s16 / s24 / s32 / fltp etc.
+                if let Some(depth) = token.strip_prefix('s') {
+                    if let Ok(value) = depth.parse::<u32>() {
+                        if value > 0 && bit_depth == 0 {
+                            bit_depth = value;
+                        }
+                    }
+                }
+            }
+            // "24 bits" style
+            if bit_depth == 0 {
+                let lower = trimmed.to_ascii_lowercase();
+                if let Some(idx) = lower.find("bits") {
+                    // look back for a number
+                    let before = &lower[..idx];
+                    if let Some(num) = before.split_whitespace().last() {
+                        if let Ok(value) = num.parse::<u32>() {
+                            bit_depth = value;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if sample_rate == 0 {
+        return Err(FfmpegError::Exit {
+            code: -1,
+            message: format!("no audio stream found in probe output: {text}"),
+        });
+    }
+    Ok(FfmpegInfo {
+        bit_depth: if bit_depth == 0 { 16 } else { bit_depth },
+        sample_rate,
+        duration_seconds,
+    })
+}
+
+fn parse_duration(text: &str) -> Option<f64> {
+    // "HH:MM:SS.xx"
+    let parts: Vec<&str> = text.split(':').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let hours: f64 = parts[0].trim().parse().ok()?;
+    let minutes: f64 = parts[1].trim().parse().ok()?;
+    let seconds: f64 = parts[2].trim().parse().ok()?;
+    Some(hours * 3600.0 + minutes * 60.0 + seconds)
 }

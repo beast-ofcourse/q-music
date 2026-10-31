@@ -30,7 +30,7 @@ use url::Url;
 type RawHop = (u16, String, BTreeMap<String, Vec<String>>, Vec<u8>, String);
 
 /// Manifest default when `capabilities.networkTimeoutSeconds` is absent.
-pub const DEFAULT_TIMEOUT_SECONDS: u64 = 15;
+pub const DEFAULT_TIMEOUT_SECONDS: u64 = 30;
 /// Redirect hops a single logical request may take.
 pub const MAX_REDIRECTS: u32 = 10;
 /// Largest response body accepted, in bytes. Well above any JSON metadata

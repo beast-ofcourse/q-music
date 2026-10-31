@@ -1,12 +1,12 @@
 {
     "name":  "q-music",
     "private":  true,
-    "version":  "0.1.1",
+    "version":  "0.2.0",
     "type":  "module",
-    "description":  "Q-Music — a fast, native-format desktop music player with a Rust engine.",
+    "description":  "Q-Music - a fast, native-format desktop music player with a Rust engine.",
     "scripts":  {
                     "dev":  "vite",
-                    "build":  "tsc --noEmit \u0026\u0026 vite build",
+                    "build":  "tsc --noEmit && vite build",
                     "preview":  "vite preview --port 4173",
                     "tauri":  "tauri",
                     "tauri:dev":  "tauri dev",

@@ -398,6 +398,9 @@ export interface ExtensionSurface {
   providerDetail(kind: string, provider: string, id: string): Promise<any>;
   providerHome(): Promise<any>;
   providerLyrics(trackId: number): Promise<ProviderLyrics | null>;
+  handleUrl(url: string): Promise<any>;
+  providerHomeFeed(id: string): Promise<any>;
+  providerBrowseCategories(id: string): Promise<any>;
 
   onExtensionProgress(handler: (progress: InstallProgress) => void): Promise<UnlistenFn>;
   onQueue(handler: (jobs: QueueJob[]) => void): Promise<UnlistenFn>;
@@ -426,6 +429,9 @@ export const COMMANDS = {
   providerDetail: "provider_detail",
   providerHome: "provider_home",
   lyrics: "provider_lyrics",
+  handleUrl: "extensions_handle_url",
+  providerHomeFeed: "provider_home_feed",
+  providerBrowseCategories: "provider_browse_categories",
 } as const;
 
 export const EVENTS = {
@@ -462,6 +468,9 @@ export const tauriExtensions: ExtensionSurface = {
   providerDetail: (kind, provider, id) => invoke(COMMANDS.providerDetail, { kind, provider, id }),
   providerHome: () => invoke(COMMANDS.providerHome),
   providerLyrics: (trackId) => invoke(COMMANDS.lyrics, { trackId }),
+  handleUrl: (url) => invoke(COMMANDS.handleUrl, { url }),
+  providerHomeFeed: (id) => invoke(COMMANDS.providerHomeFeed, { id }),
+  providerBrowseCategories: (id) => invoke(COMMANDS.providerBrowseCategories, { id }),
 
   onExtensionProgress: (handler) =>
     listen<InstallProgress>(EVENTS.install, (event) => handler(event.payload)),
@@ -1263,6 +1272,73 @@ export const demoExtensions: ExtensionSurface = {
 
   async providerHome() {
     return { providers: [] };
+  },
+
+  async handleUrl(url) {
+    await delay(120);
+    return {
+      provider: "spotify-web",
+      item: {
+        type: "track",
+        track: {
+          id: url,
+          name: "Resolved from link",
+          artists: ["Demo Artist"],
+          duration_ms: 214000,
+          images: [],
+        },
+      },
+    };
+  },
+
+  async providerHomeFeed(id) {
+    await delay(180);
+    const trackItem = (title: string, i: number) => ({
+      id: `${id}-track-${i}`,
+      type: "track",
+      title,
+      artists: ["Demo Artist"],
+      images: [],
+      duration_ms: 180000 + i * 1000,
+    });
+    const albumItem = (title: string, i: number) => ({
+      id: `${id}-album-${i}`,
+      type: "album",
+      title,
+      artists: ["Demo Artist"],
+      images: [],
+    });
+    return {
+      provider: id,
+      item: {
+        sections: [
+          {
+            title: "Made for you",
+            items: [trackItem("Night Ferry", 1), trackItem("Salt Flat", 2), trackItem("Blue Interval", 3)],
+          },
+          {
+            title: "New releases",
+            items: [albumItem("Blue Interval", 1), albumItem("Copper Hours", 2)],
+          },
+        ],
+      },
+    };
+  },
+
+  async providerBrowseCategories(id) {
+    await delay(120);
+    return {
+      provider: id,
+      item: {
+        categories: [
+          { id: "pop", name: "Pop" },
+          { id: "rock", name: "Rock" },
+          { id: "jazz", name: "Jazz" },
+          { id: "electronic", name: "Electronic" },
+          { id: "classical", name: "Classical" },
+        ],
+      },
+    };
   },
 
   async providerLyrics(trackId) {

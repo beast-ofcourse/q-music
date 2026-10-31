@@ -12,6 +12,8 @@ interface ProviderRowProps {
   notice: string | undefined;
   onMove: (direction: -1 | 1) => void;
   onRetry: () => void;
+  onHomeFeed?: () => void;
+  onBrowse?: () => void;
   register: (element: HTMLLIElement | null) => void;
 }
 
@@ -28,6 +30,8 @@ export function ProviderRow({
   notice,
   onMove,
   onRetry,
+  onHomeFeed,
+  onBrowse,
   register,
 }: ProviderRowProps) {
   const canMoveUp = position > 1 && !busy;
@@ -113,6 +117,16 @@ export function ProviderRow({
             {busy ? "Checking..." : "Retry"}
           </button>
         )}
+        {onHomeFeed ? (
+          <button type="button" className="prov-action" onClick={onHomeFeed} aria-label={`Open home feed for ${provider.displayName}`}>
+            Feed
+          </button>
+        ) : null}
+        {onBrowse ? (
+          <button type="button" className="prov-action" onClick={onBrowse} aria-label={`Browse categories for ${provider.displayName}`}>
+            Browse
+          </button>
+        ) : null}
       </span>
 
       {notice === undefined ? null : (

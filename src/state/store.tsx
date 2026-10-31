@@ -54,7 +54,10 @@ export type View =
   | { kind: "settings" }
   | { kind: "extensions" }
   | { kind: "editor" }
-  | { kind: "lyrics-view" };
+  | { kind: "lyrics-view" }
+  | { kind: "provider-home-feed"; id: string }
+  | { kind: "provider-browse-categories"; id: string }
+  | { kind: "resolved"; provider: string; entityType: string; item: any };
 
 export type NowTab = "queue" | "lyrics" | "downloads";
 
@@ -432,7 +435,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           view.kind === "folders" ||
           view.kind === "eq" ||
           view.kind === "settings" ||
-          view.kind === "editor"
+          view.kind === "editor" ||
+          view.kind === "provider-home-feed" ||
+          view.kind === "provider-browse-categories" ||
+          view.kind === "resolved"
         ) {
           dispatch({ type: "tracks", tracks: [], loading: false });
           return;

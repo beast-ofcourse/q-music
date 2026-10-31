@@ -72,10 +72,9 @@ fn activate_provider(
     let http = HostHttp::new(allowlist, HttpLimits::with_timeout_seconds(http_timeout));
     let config = HostConfig {
         app_version: "4.10.0".to_string(),
-        user_agent: "Q-Music/0.1.0".to_string(),
+        user_agent: "Q-Music/0.2.0".to_string(),
         data_dir: Some(ext_state_root.join(".data").join(&installed.id)),
-        http: Some(http),
-        ffmpeg: None,
+        http: Some(http),        ffmpeg: None,
     };
     let host = Arc::new(HostServices::new(config));
     store.activate(&installed.id, host).map_err(|e| e.to_string())?;

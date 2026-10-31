@@ -354,6 +354,12 @@ pub enum DownloadFailureKind {
     DownloadError,
     ApiError,
     PostProcess,
+    GeoBlocked,
+    StreamError,
+    FormatError,
+    QuotaExceeded,
+    PremiumRequired,
+    ServerError,
     /// A package-specific value the host does not model. Kept verbatim so it can
     /// be logged and shown without guessing what it means.
     Other(String),
@@ -378,6 +384,12 @@ impl DownloadFailureKind {
             "download_error" => Self::DownloadError,
             "api_error" => Self::ApiError,
             "post_process_error" => Self::PostProcess,
+            "geo_blocked" => Self::GeoBlocked,
+            "stream_error" => Self::StreamError,
+            "format_error" => Self::FormatError,
+            "quota_exceeded" => Self::QuotaExceeded,
+            "premium_required" => Self::PremiumRequired,
+            "server_error" => Self::ServerError,
             _ => Self::Other(hint.to_string()),
         }
     }
@@ -396,6 +408,12 @@ impl DownloadFailureKind {
             Self::DownloadError => "download_error",
             Self::ApiError => "api_error",
             Self::PostProcess => "post_process_error",
+            Self::GeoBlocked => "geo_blocked",
+            Self::StreamError => "stream_error",
+            Self::FormatError => "format_error",
+            Self::QuotaExceeded => "quota_exceeded",
+            Self::PremiumRequired => "premium_required",
+            Self::ServerError => "server_error",
             Self::Other(other) => other,
         }
     }
@@ -1340,6 +1358,19 @@ registerExtension({
         assert!(instrumental.lines.is_empty());
 
         assert_eq!(lyrics_from_value(Value::Null).expect("null is not an error"), None);
+    }
+
+    #[test]
+    fn from_hint_maps_documented_error_codes_to_typed_variants() {
+        assert_eq!(DownloadFailureKind::from_hint(Some("geo_blocked")), DownloadFailureKind::GeoBlocked);
+        assert_eq!(DownloadFailureKind::from_hint(Some("stream_error")), DownloadFailureKind::StreamError);
+        assert_eq!(DownloadFailureKind::from_hint(Some("format_error")), DownloadFailureKind::FormatError);
+        assert_eq!(DownloadFailureKind::from_hint(Some("quota_exceeded")), DownloadFailureKind::QuotaExceeded);
+        assert_eq!(DownloadFailureKind::from_hint(Some("premium_required")), DownloadFailureKind::PremiumRequired);
+        assert_eq!(DownloadFailureKind::from_hint(Some("server_error")), DownloadFailureKind::ServerError);
+        for code in ["geo_blocked", "stream_error", "format_error", "quota_exceeded", "premium_required", "server_error"] {
+            assert_eq!(DownloadFailureKind::from_hint(Some(code)).as_str(), code);
+        }
     }
 }
 

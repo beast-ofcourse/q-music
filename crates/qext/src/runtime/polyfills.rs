@@ -1407,11 +1407,20 @@ pub fn install<'js>(ctx: &Ctx<'js>, host: Arc<HostServices>) -> rquickjs::Result
     // `getInfo` is documented but not implemented: the host's own tag reader
     // already answers these questions, and a second implementation in ffmpeg
     // could disagree with it.
-    bind(ctx, &globals, "__qext_ffmpeg_info", || -> String {
-        typed_error_envelope(
-            "unsupported",
-            "ffmpeg.getInfo is not implemented by this host; read the file with the built-in tag reader",
-        )
+    let info_host = Arc::clone(&host);
+    bind(ctx, &globals, "__qext_ffmpeg_info", move |path: String| -> String {
+        let Some(ffmpeg) = info_host.ffmpeg() else {
+            return typed_error_envelope("unsupported", "ffmpeg is not available in this host".to_string());
+        };
+        match ffmpeg.info(&path) {
+            Ok(info) => ok_envelope(serde_json::json!({
+                "success": true,
+                "bit_depth": info.bit_depth,
+                "sample_rate": info.sample_rate,
+                "duration": info.duration_seconds,
+            })),
+            Err(error) => ffmpeg_result_envelope(error),
+        }
     })?;
 
     ctx.eval::<(), _>(HOST_PRELUDE)?;
@@ -2250,8 +2259,11 @@ var gobackend = {
   getLocalTime: function () {
     return JSON.parse(String(__qext_unwrap(__qext_local_time())));
   },
-  getAudioQuality: function () {
-    return { error: 'audio quality inspection is not available in this host' };
+  getAudioQuality: function (path) {
+    if (typeof ffmpeg !== "undefined" && ffmpeg && typeof ffmpeg.getInfo === "function") {
+      return ffmpeg.getInfo(path);
+    }
+    return { error: "audio quality inspection is not available in this host" };
   },
   checkISRCExists: function () {
     return { exists: false };
@@ -2263,11 +2275,39 @@ var gobackend = {
 
 // ==================== unimplemented surfaces ====================
 
+var __qext_cred_key = "qext-credentials-v1";
 var credentials = {
-  store: function () { __qext_unavailable('credentials.store'); },
-  get: function () { __qext_unavailable('credentials.get'); },
-  has: function () { __qext_unavailable('credentials.has'); },
-  remove: function () { __qext_unavailable('credentials.remove'); }
+  __bag: function () { return storage.get("__qext_credentials__") || {}; },
+  __save: function (bag) { storage.set("__qext_credentials__", bag); },
+  store: function (key, value) {
+    var bag = credentials.__bag();
+    var sealed = utils.encrypt(JSON.stringify(value), __qext_cred_key);
+    if (!sealed || !sealed.success) {
+      return;
+    }
+    bag[String(key)] = sealed.data;
+    credentials.__save(bag);
+  },
+  get: function (key) {
+    var bag = credentials.__bag();
+    if (!Object.prototype.hasOwnProperty.call(bag, String(key))) {
+      return undefined;
+    }
+    var out = utils.decrypt(bag[String(key)], __qext_cred_key);
+    if (!out || !out.success) {
+      return undefined;
+    }
+    try { return JSON.parse(out.data); } catch (e) { return undefined; }
+  },
+  has: function (key) {
+    var bag = credentials.__bag();
+    return Object.prototype.hasOwnProperty.call(bag, String(key));
+  },
+  remove: function (key) {
+    var bag = credentials.__bag();
+    delete bag[String(key)];
+    credentials.__save(bag);
+  }
 };
 
 var auth = {
@@ -2276,15 +2316,19 @@ var auth = {
   setAuthCode: function () { __qext_unavailable('auth.setAuthCode'); },
   isAuthenticated: function () { __qext_unavailable('auth.isAuthenticated'); },
   getTokens: function () { __qext_unavailable('auth.getTokens'); },
-  clearAuth: function () { __qext_unavailable('auth.clearAuth'); }
+  clearAuth: function () { __qext_unavailable('auth.clearAuth'); },
+  generatePKCE: function () { __qext_unavailable('auth.generatePKCE'); },
+  getPKCE: function () { __qext_unavailable('auth.getPKCE'); },
+  startOAuthWithPKCE: function () { __qext_unavailable('auth.startOAuthWithPKCE'); },
+  exchangeCodeWithPKCE: function () { __qext_unavailable('auth.exchangeCodeWithPKCE'); }
 };
 
 var ffmpeg = {
   execute: function (args) {
     return __qext_ffmpeg_result(__qext_ffmpeg_execute(__qext_text(args)));
   },
-  getInfo: function () {
-    return __qext_ffmpeg_result(__qext_ffmpeg_info());
+  getInfo: function (path) {
+    return __qext_ffmpeg_result(__qext_ffmpeg_info(__qext_text(path)));
   },
   convert: function (input, output, options) {
     return __qext_ffmpeg_result(
@@ -2935,7 +2979,6 @@ mod tests {
     #[test]
     fn unimplemented_surfaces_name_themselves() {
         for (expression, needle) in [
-            ("credentials.get('x')", "credentials.get"),
             ("auth.openAuthUrl('https://x.test')", "auth.openAuthUrl"),
         ] {
             let value = default_probe(&format!(

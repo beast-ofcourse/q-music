@@ -97,6 +97,9 @@ pub fn run() {
             ext_commands::queue_jobs,
             ext_commands::queue_cancel,
             ext_commands::queue_retry,
+            ext_commands::extensions_handle_url,
+            ext_commands::provider_home_feed,
+            ext_commands::provider_browse_categories,
             ext_commands::queue_enqueue,
         ])
         .setup(|app| {
