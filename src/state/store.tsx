@@ -52,7 +52,8 @@ export type View =
   | { kind: "eq" }
   | { kind: "settings" }
   | { kind: "extensions" }
-  | { kind: "editor" };
+  | { kind: "editor" }
+  | { kind: "lyrics-view" };
 
 export type NowTab = "queue" | "lyrics" | "downloads";
 

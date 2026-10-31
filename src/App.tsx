@@ -15,6 +15,7 @@ import { FoldersView } from "./views/FoldersView";
 import { PlaylistsView } from "./views/PlaylistsView";
 import { SettingsView } from "./views/SettingsView";
 import { TrackListView } from "./views/TrackListView";
+import { LyricsView } from "./views/LyricsView";
 
 const SEEK_STEP_MS = 5_000;
 const COARSE_SEEK_MS = 30_000;
@@ -45,6 +46,8 @@ function MainView({ view }: { view: View }) {
       return <ExtensionsView />;
     case "editor":
       return <EditorView />;
+    case "lyrics-view":
+      return <LyricsView />;
   }
 }
 
@@ -79,6 +82,7 @@ export function App() {
     setShuffle,
     setRepeat,
     closeNow,
+    setView,
   } = useStore();
 
   // The listener is attached once; the ref carries the current closure so the handler
@@ -127,6 +131,10 @@ export function App() {
       case "r":
       case "R":
         setRepeat(REPEAT_CYCLE[repeat]);
+        break;
+      case "l":
+      case "L":
+        if (currentTrack) setView({ kind: "lyrics-view" });
         break;
       case "/":
         event.preventDefault();

@@ -159,6 +159,16 @@ export function LyricsPane() {
       </p>
 
       <div className="lyric-actions">
+        <button
+          type="button"
+          className="button button-quiet"
+          onClick={() => setView({ kind: "lyrics-view" })}
+        >
+          Full screen
+        </button>
+      </div>
+
+      <div className="lyric-actions">
         {providerLyricsData ? (
           <button
             type="button"
