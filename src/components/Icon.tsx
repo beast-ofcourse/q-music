@@ -26,6 +26,7 @@ export type IconName =
   | "disc"
   | "artist"
   | "library"
+  | "home"
   | "clock"
   | "settings"
   | "puzzle"
@@ -230,6 +231,13 @@ function shapes(name: IconName) {
       return <path d="M12 19V6m-5 5 5-5 5 5" {...STROKE} />;
     case "arrow-down":
       return <path d="M12 5v13m-5-5 5 5 5-5" {...STROKE} />;
+    case "home":
+      return (
+        <>
+          <path d="M4 11.5 12 5l8 6.5" {...STROKE} />
+          <path d="M6.5 10.5V19h11V10.5" {...STROKE} />
+        </>
+      );
     case "more":
       return (
         <>

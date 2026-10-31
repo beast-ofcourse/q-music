@@ -185,10 +185,10 @@ The host version used for evaluation is **4.10.0** (demo) / **4.10.0** (real). T
 | `customSearch` | 2 | `query`, `options` |
 | `handleUrl` | 2 | `url`, `options` |
 
-**Refusal reason** (from `negotiate::tests::tidal_is_refused_with_exactly_the_three_features_it_needs`):
-- ❌ `signedSession@3` — **unmet** (host max is v1 via `preparedContext`, but `signedSession` is a distinct feature not implemented)
-- ❌ `sessionGrant@1` — **unmet**
-- ❌ `downloadSegments@1` — **unmet** (segmented download transfer not implemented in host)
+**Negotiation** (from `negotiate::tests::tidal_installs_with_all_features_supported`):
+- ✅ `signedSession@3` — met (`RUNTIME_FEATURES` carries it; HMAC signing via the host HTTP client)
+- ✅ `sessionGrant@1` — met
+- ✅ `downloadSegments@1` — met (segmented/parallel transfer in the host's file polyfills)
 
 ---
 
@@ -265,7 +265,7 @@ The following 10 divergences between the Mornye Extension Platform documentation
 | 10 | `matching.compareStrings` | Boolean? | Returns **0..1 similarity**; `≥ 0.86` = match | `adapter.rs` threshold |
 | 11 | `getLocalTime().offsetMinutes` | `getTimezoneOffset` sign | **Negated**: `-330` = UTC+5:30 | `runtime/polyfills.rs` — `getLocalTime` |
 | 12 | `utils.sleep(ms)` | Returns `void` / promise | Returns **`false` when cancelled** | `runtime/polyfills.rs` — deadline check |
-| 13 | `file.download` | Downloads a file | **Unimplemented** (throws named gap) | `runtime/polyfills.rs` — `file.download` → `unsupported` |
+| 13 | `file.download` | Downloads a file | Implemented natively (streamed by the host's transfer engine: resume, headers, progress, cancel) | `runtime/polyfills.rs` — `__qext_file_download` → `runtime/transfer` |
 
 > **Note**: Divergences 8–13 are host polyfill behaviours chosen by this implementation, not verified upstream matches. They are recorded here so downstream consumers know the exact contract.
 
@@ -296,11 +296,11 @@ Every claim above traces to a test that exists and passes in `crates/qext`:
 |-------|------|
 | Spotify Web installs without refusal | `negotiate::tests::spotify_web_and_apple_music_install_with_no_refusal` |
 | Apple Music installs without refusal | `negotiate::tests::spotify_web_and_apple_music_install_with_no_refusal` |
-| Amazon refused: `signedSession@1`, `sessionGrant@1` | `negotiate::tests::amazon_gets_the_context_feature_but_not_the_session_ones` |
-| Tidal refused: `signedSession@3`, `sessionGrant@1`, `downloadSegments@1` | `negotiate::tests::tidal_is_refused_with_exactly_the_three_features_it_needs` |
+| Amazon installs with all features supported | `negotiate::tests::amazon_installs_with_all_features_supported` |
+| Tidal installs with all features supported | `negotiate::tests::tidal_installs_with_all_features_supported` |
 | Unknown feature refused verbatim | `negotiate::tests::an_unknown_feature_is_refused_and_reported_verbatim` |
 | Malformed requirements refused | `negotiate::tests::malformed_requirements_are_refused_and_never_crowded_out` |
-| Version ordering (semver) | `negotiate::tests::a_known_feature_at_or_below_the_host_version_is_supported` |
+| Version ordering (semver) | `negotiate::tests::a_known_feature_at_or_below_the_host_version_is_supported`, `a_known_feature_above_the_host_version_is_refused_with_both_versions` |
 | Registry parses all 12 entries | `registry::tests::parses_all_fixture_entries` |
 | Manifest round-trips (Spotify, Amazon, Tidal) | `manifest::tests::parses_spotify_web_fixture`, `parses_amazon_fixture`, `parses_tidal_fixture_including_download_transfer` |
 | Package install/uninstall/upgrade | `store::tests::install_uninstall_cleans_up`, `store::tests::downgrade_refused`, `store::tests::interrupted_install_leaves_no_half_enabled` |
@@ -352,9 +352,9 @@ No version or hash in this document was typed from memory.
 
 | Risk | Mitigation |
 |------|------------|
-| Commercial download providers (`amazon`, `tidal-web`, etc.) cannot be tested end-to-end without live credentials and the three missing runtime features. | Documented as out of scope; host refuses them at install with named reasons. |
+| Commercial download providers (`amazon`, `tidal-web`, etc.) cannot be tested end-to-end without live credentials. | Their transfer features are implemented and unit-tested offline; live-service behaviour stays out of scope for fixture tests. |
 | `utils.encrypt` format may not match upstream if upstream ever documents it. | Recorded as a known divergence; any future upstream spec will be reconciled in a versioned `EXTENSIONS.md` update. |
-| `file.download` polyfill throws `unsupported`; a package using it will fail at runtime. | No fixture package uses `file.download`; the gap is named and tested. |
+| `file.download` interprets package URLs byte-for-byte; a hostile package points it anywhere its manifest allowlist permits. | Redirects off the allowlisted host are denied; range/resume mismatch is a typed error; a package's own data dir bounds the output path. |
 | QuickJS runtime has no heap limit enforcement beyond the 128 MB soft limit set in `RuntimeConfig`. | Tested with `runtime::tests::memory_limit_enforced`; 128 MB limit triggers OOM kill. |
 
 ---

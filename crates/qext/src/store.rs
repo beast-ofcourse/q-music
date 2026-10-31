@@ -169,7 +169,7 @@ pub struct ExtensionStore {
     staging_root: PathBuf,
     data_root: PathBuf,
     limits: RuntimeLimits,
-    runtimes: Mutex<HashMap<String, ExtensionRuntime>>,
+    runtimes: Mutex<HashMap<String, Arc<ExtensionRuntime>>>,
 }
 
 impl std::fmt::Debug for ExtensionStore {
@@ -480,7 +480,7 @@ impl ExtensionStore {
             .runtimes
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        runtimes.insert(id.to_string(), runtime);
+        runtimes.insert(id.to_string(), Arc::new(runtime));
 
         Ok(())
     }
@@ -514,7 +514,21 @@ impl ExtensionStore {
             .runtimes
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        runtimes.get(id).map(action)
+        runtimes.get(id).map(|runtime| action(runtime))
+    }
+
+    /// Clone a shared handle to one running runtime.
+    ///
+    /// The lock is held only for the lookup: a caller that keeps the handle can
+    /// issue calls from its own thread for as long as the runtime lives, which is
+    /// what a long download needs without pinning the store's other callers.
+    /// `with_runtime` is still the right tool for short, borrowed calls.
+    pub fn runtime_of(&self, id: &str) -> Option<Arc<ExtensionRuntime>> {
+        self.runtimes
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .get(id)
+            .cloned()
     }
 
     /// `<root>/<id>`, with the id checked so the result is always a direct child.

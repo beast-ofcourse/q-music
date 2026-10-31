@@ -7,6 +7,7 @@
 mod commands;
 mod ext_commands;
 mod media;
+mod online_commands;
 mod state;
 
 use std::sync::Mutex;
@@ -76,12 +77,19 @@ pub fn run() {
             commands::reveal_track,
             ext_commands::extensions_snapshot,
             ext_commands::extensions_install_file,
+            ext_commands::extensions_install,
             ext_commands::extensions_settings,
             ext_commands::extensions_save_settings,
             ext_commands::extensions_invoke_action,
             ext_commands::extensions_set_enabled,
             ext_commands::extensions_uninstall,
             ext_commands::search_providers,
+            online_commands::online_search,
+            online_commands::online_search_cancel,
+            online_commands::provider_detail,
+            online_commands::provider_home,
+            online_commands::providers_priority_get,
+            online_commands::providers_priority_set,
             ext_commands::providers_list,
             ext_commands::providers_set_priority,
             ext_commands::providers_retry,
@@ -115,14 +123,23 @@ pub fn run() {
 
             // Extension host.
             let ext_root = root.join("extensions");
-            let ext_store = qext::store::ExtensionStore::open(&ext_root)
+            let limits = qext::runtime::RuntimeLimits {
+                call_timeout: ext_commands::LONG_CALL_TIMEOUT,
+                ..qext::runtime::RuntimeLimits::default()
+            };
+            let ext_store = qext::store::ExtensionStore::open_with(&ext_root, limits)
                 .map_err(|e| e.to_string())?;
             app.manage(ext_commands::ExtensionState {
                 store: Mutex::new(ext_store),
                 root: ext_root,
-                download_jobs: Mutex::new(Vec::new()),
+                data_root: root.clone(),
+                app: app.handle().clone(),
+                jobs: Mutex::new(Vec::new()),
+                health: Mutex::new(std::collections::HashMap::new()),
+                persisted: Mutex::new(ext_commands::load_persisted_state(&root.join("extensions"))),
+                search_coordinator: qext::search::SearchCoordinator::new(std::time::Duration::from_secs(300)),
             });
-
+            ext_commands::spawn_download_worker(app.handle().clone());
             app.manage(AppState {
                 library: Mutex::new(library),
                 engine: Mutex::new(engine),

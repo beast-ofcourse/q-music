@@ -38,6 +38,7 @@ export type ThemeName =
   | "babypink-catppuccin";
 
 export type View =
+  | { kind: "home" }
   | { kind: "library" }
   | { kind: "favorites" }
   | { kind: "recent" }
@@ -108,7 +109,7 @@ const EMPTY_SNAPSHOT: EngineSnapshot = {  status: "idle",
 const INITIAL: State = {
   phase: "loading",
   failure: null,
-  view: { kind: "library" },
+  view: { kind: "home" },
   query: emptyQuery(),
   tracks: [],
   tracksLoading: true,

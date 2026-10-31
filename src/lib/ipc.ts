@@ -18,7 +18,7 @@ import type {
   TrackGroup,
   TrackQuery,
 } from "./types";
-import type { ProviderLyrics, ProviderSearchOutcome } from "./extensions";
+import type { OnlineSearchResponse, ProviderLyrics, ProviderSearchOutcome } from "./extensions";
 
 /** Column names the core accepts for `distinct_values`. */
 export type DistinctColumn = "artist" | "album" | "genre" | "format" | "album_artist";
@@ -60,6 +60,10 @@ export interface Backend extends ExtensionSurface {
   estimateLyrics(trackId: number): Promise<Lyrics>;
 
   searchProviders(query: string, limit: number): Promise<ProviderSearchOutcome[]>;
+  onlineSearch(requestId: string, query: string, types: string[], limit: number, offset: number): Promise<OnlineSearchResponse>;
+  onlineSearchCancel(requestId: string): Promise<void>;
+  providerDetail(kind: string, provider: string, id: string): Promise<any>;
+  providerHome(): Promise<any>;
   providerLyrics(trackId: number): Promise<ProviderLyrics | null>;
 
   listPlaylists(): Promise<Playlist[]>;
@@ -130,6 +134,11 @@ const tauriBackend: Backend = {
   estimateLyrics: (trackId) => invoke("estimate_lyrics", { trackId }),
 
   searchProviders: (query, limit) => invoke("search_providers", { query, limit }),
+  onlineSearch: (requestId, query, types, limit, offset) =>
+    invoke("online_search", { requestId, query, types, limit, offset }),
+  onlineSearchCancel: (requestId) => invoke("online_search_cancel", { requestId }),
+  providerDetail: (kind, provider, id) => invoke("provider_detail", { kind, provider, id }),
+  providerHome: () => invoke("provider_home"),
   providerLyrics: (trackId) => invoke("provider_lyrics", { trackId }),
 
   listPlaylists: () => invoke("list_playlists"),

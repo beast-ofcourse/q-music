@@ -7,35 +7,32 @@
 //!
 //! Run with: `cargo test -p qext --features real-packages`
 
-use qext::package::PackageInfo;
-use qext::runtime::RuntimeLimits;
-// testing module is pub(crate); integration tests use public APIs only.
-use std::path::PathBuf;
-
-fn archive_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join("archives")
-        .join(format!("{name}.sflx"))
-}
-
-fn inspect_package(name: &str) -> PackageInfo {
-    PackageInfo::inspect(&archive_path(name))
-        .unwrap_or_else(|e| panic!("{name} failed to inspect: {e}"))
-}
-
-/// The five integration packages that must load and initialize offline.
-const INTEGRATION_PACKAGES: &[&str] = &[
-    "spotify-web",
-    "apple-music",
-    "bugs-music",
-    "melon-music",
-    "genie-music",
-];
-
 #[cfg(feature = "real-packages")]
 mod real {
-    use super::*;
+    use qext::package::PackageInfo;
+    use qext::runtime::RuntimeLimits;
+    use std::path::PathBuf;
+
+    fn archive_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("archives")
+            .join(format!("{name}.sflx"))
+    }
+
+    fn inspect_package(name: &str) -> PackageInfo {
+        PackageInfo::inspect(&archive_path(name))
+            .unwrap_or_else(|e| panic!("{name} failed to inspect: {e}"))
+    }
+
+    /// The five integration packages that must load and initialize offline.
+    const INTEGRATION_PACKAGES: &[&str] = &[
+        "spotify-web",
+        "apple-music",
+        "bugs-music",
+        "melon-music",
+        "genie-music",
+    ];
 
     #[test]
     fn all_five_packages_inspect_cleanly() {
@@ -131,15 +128,5 @@ mod real {
             assert!(caps.has("initialize"), "{name} missing initialize");
             assert!(caps.has("cleanup"), "{name} missing cleanup");
         }
-    }
-}
-
-// Default (non-feature) test: verify the feature gate works.
-#[cfg(not(feature = "real-packages"))]
-mod default_suite {
-    #[test]
-    fn real_packages_feature_is_opt_in() {
-        // This test passes trivially to confirm the default suite is network-free.
-        assert!(true);
     }
 }

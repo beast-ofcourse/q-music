@@ -12,6 +12,7 @@ import { EditorView } from "./views/EditorView";
 import { EqView } from "./views/EqView";
 import { ExtensionsView } from "./views/ExtensionsView";
 import { FoldersView } from "./views/FoldersView";
+import { HomeView } from "./views/HomeView";
 import { PlaylistsView } from "./views/PlaylistsView";
 import { SettingsView } from "./views/SettingsView";
 import { TrackListView } from "./views/TrackListView";
@@ -23,6 +24,8 @@ const COARSE_SEEK_MS = 30_000;
 /** Every view has exactly one home; the switch is exhaustive so none can be forgotten. */
 function MainView({ view }: { view: View }) {
   switch (view.kind) {
+    case "home":
+      return <HomeView />;
     case "library":
     case "favorites":
     case "recent":

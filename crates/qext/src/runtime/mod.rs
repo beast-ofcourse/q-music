@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -100,10 +100,13 @@ enum Job {
 }
 
 /// Handle to a running extension thread.
+///
+/// Calls go through a channel, so one runtime can be driven from any thread.
+/// The channel sender is behind a mutex because `Sender` itself is not `Sync`.
 pub struct ExtensionRuntime {
     name: String,
-    tx: Sender<Job>,
-    join: Option<JoinHandle<()>>,
+    tx: Mutex<Sender<Job>>,
+    join: Mutex<Option<JoinHandle<()>>>,
     surface: Vec<FunctionInfo>,
     call_timeout: Duration,
     host: Arc<HostServices>,
@@ -169,8 +172,8 @@ impl ExtensionRuntime {
 
         Ok(Self {
             name,
-            tx: job_tx,
-            join: Some(join),
+            join: Mutex::new(Some(join)),
+            tx: Mutex::new(job_tx),
             surface,
             call_timeout: limits.call_timeout,
             host,
@@ -218,6 +221,8 @@ impl ExtensionRuntime {
 
         let (reply_tx, reply_rx) = channel();
         self.tx
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
             .send(Job::Call {
                 function: function.to_string(),
                 args_json,
@@ -232,8 +237,17 @@ impl ExtensionRuntime {
 
     /// Stop the thread and wait for it. Idempotent.
     pub fn shutdown(&mut self) {
-        let _ = self.tx.send(Job::Shutdown);
-        if let Some(join) = self.join.take() {
+        let _ = self
+            .tx
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .send(Job::Shutdown);
+        let join = self
+            .join
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .take();
+        if let Some(join) = join {
             let _ = join.join();
         }
     }

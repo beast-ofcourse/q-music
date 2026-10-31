@@ -25,6 +25,10 @@ use thiserror::Error;
 use ureq::http::{HeaderValue, Method, Request};
 use url::Url;
 
+/// One completed redirect chain, raw: (status, status text, headers, body,
+/// final url). Shared by `send` and the assembly site `finish`.
+type RawHop = (u16, String, BTreeMap<String, Vec<String>>, Vec<u8>, String);
+
 /// Manifest default when `capabilities.networkTimeoutSeconds` is absent.
 pub const DEFAULT_TIMEOUT_SECONDS: u64 = 15;
 /// Redirect hops a single logical request may take.
@@ -235,6 +239,42 @@ impl HostHttp {
         body: Option<Vec<u8>>,
         headers: &[(String, String)],
     ) -> Result<HttpResponse, HttpError> {
+        let (status_code, status_text, headers, bytes, final_url) =
+            self.send(method, url, body, headers)?;
+
+        Ok(HttpResponse {
+            status_code,
+            status: status_text,
+            ok: (200..300).contains(&status_code),
+            body: String::from_utf8_lossy(&bytes).into_owned(),
+            url: final_url,
+            headers,
+        })
+    }
+
+    /// One response as raw bytes, following redirects.
+    ///
+    /// Host-only, and crucially unreachable from package code: a package file
+    /// is a zip whose bytes cannot survive a text decode, so the host's own
+    /// fetches (registry installs) need the body before any string coercion.
+    pub fn get_bytes(&self, url: &str, headers: &[(String, String)]) -> Result<Vec<u8>, HttpError> {
+        let (_, _, _, bytes, _) = self.send("GET", url, None, headers)?;
+        Ok(bytes)
+    }
+
+    /// Run one method through the redirect loop and return the raw outcome.
+    ///
+    /// Every hop is allowlist-rechecked; credential headers are dropped when a
+    /// redirect leaves the original host, so an allowlisted CDN never receives
+    /// the user's bearer token. The cookie jar is unaffected: it attaches
+    /// cookies per host on its own.
+    fn send(
+        &self,
+        method: &str,
+        url: &str,
+        body: Option<Vec<u8>>,
+        headers: &[(String, String)],
+    ) -> Result<RawHop, HttpError> {
         let method = parse_method(method)?;
 
         // The first hop is checked before any socket work.
@@ -288,11 +328,7 @@ impl HostHttp {
                 let Some(location) = location else {
                     // A redirect without a target is returned as-is: the
                     // package can inspect the status itself.
-                    return read_response(
-                        response,
-                        self.limits.max_body_bytes,
-                        current.as_str().to_string(),
-                    );
+                    return finish(response, self.limits.max_body_bytes, current.as_str().to_string());
                 };
 
                 let next = current.join(&location).map_err(|_| HttpError::InvalidUrl {
@@ -329,7 +365,7 @@ impl HostHttp {
                 continue;
             }
 
-            return read_response(
+            return finish(
                 response,
                 self.limits.max_body_bytes,
                 current.as_str().to_string(),
@@ -391,11 +427,12 @@ fn map_transport_error(error: ureq::Error, timeout: Duration) -> HttpError {
     }
 }
 
-fn read_response(
+/// Read a terminal response: status, headers, raw body, final URL.
+fn finish(
     mut response: ureq::http::Response<ureq::Body>,
     max_body_bytes: u64,
     url: String,
-) -> Result<HttpResponse, HttpError> {
+) -> Result<RawHop, HttpError> {
     let status = response.status();
     let status_code = status.as_u16();
 
@@ -407,21 +444,20 @@ fn read_response(
         entry.push(String::from_utf8_lossy(value.as_bytes()).into_owned());
     }
 
-    let body_bytes = response
+    let body = response
         .body_mut()
         .with_config()
         .limit(max_body_bytes)
         .read_to_vec()
         .map_err(|error| map_transport_error(error, Duration::from_secs(0)))?;
 
-    Ok(HttpResponse {
+    Ok((
         status_code,
-        status: status.canonical_reason().unwrap_or("").to_string(),
-        ok: (200..300).contains(&status_code),
-        url,
-        body: String::from_utf8_lossy(&body_bytes).into_owned(),
+        status.canonical_reason().unwrap_or("").to_string(),
         headers,
-    })
+        body,
+        url,
+    ))
 }
 
 /// Request shape handed over the JSON bridge.
@@ -754,6 +790,29 @@ mod tests {
             .expect("request");
 
         assert_eq!(response.body, "POST 3");
+    }
+
+    /// The host's own fetches (registry installs) read zip bytes; this asserts
+    /// they arrive before any text coercion would mangle them.
+    #[test]
+    fn get_bytes_returns_the_raw_body_and_follows_redirects() {
+        let base = spawn_server(|request| match request.path.as_str() {
+            "/package" => (200, vec![], (0u8..=255u8).collect::<Vec<u8>>().clone()),
+            "/bounce" => (
+                302,
+                vec![("Location".into(), "/package".into())],
+                Vec::new(),
+            ),
+            _ => (404, vec![], b"unknown".to_vec()),
+        });
+        let http = http_for(&base);
+
+        let direct = http.get_bytes(&format!("{base}/package"), &[]).expect("direct");
+        let expected: Vec<u8> = (0..=255).collect();
+        assert_eq!(direct, expected);
+
+        let bounced = http.get_bytes(&format!("{base}/bounce"), &[]).expect("redirected");
+        assert_eq!(bounced, expected);
     }
 
     #[test]

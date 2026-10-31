@@ -21,6 +21,7 @@ export function Rail() {
   const { addFolder, busy: addingFolder } = useAddFolder();
 
   const collection: NavItem[] = [
+    { label: "Home", icon: "home", view: { kind: "home" } },
     { label: "Library", icon: "library", view: { kind: "library" }, count: stats?.tracks.toLocaleString() },
     { label: "Recently played", icon: "clock", view: { kind: "recent" } },
     { label: "Favourites", icon: "heart", view: { kind: "favorites" } },

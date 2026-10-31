@@ -18,6 +18,7 @@ pub mod providers;
 pub mod queue;
 pub mod registry;
 pub mod runtime;
+pub mod search;
 pub mod store;
 
 pub use manifest::{Manifest, ManifestError};

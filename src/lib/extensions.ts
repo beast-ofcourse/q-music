@@ -271,10 +271,84 @@ export interface ProviderTrack {
   quality: string | null;
 }
 
-export interface ProviderSearchOutcome {
+export interface OnlineSearchResponse {
+  requestId: string;
+  query: string;
+  tracks: OnlineTrackResult[];
+  albums: OnlineAlbumResult[];
+  artists: OnlineArtistResult[];
+  playlists: OnlinePlaylistResult[];
+  providers: OnlineSearchProviderStatus[];
+  elapsedMs: number;
+  cancelled: boolean;
+}
+
+export interface OnlineTrackResult {
+  id: string;
   provider: string;
   providerName: string;
-  results: ProviderTrack[];
+  providerTrackId: string;
+  title: string;
+  artists: string[];
+  album?: string | null;
+  albumId?: string | null;
+  albumProvider?: string | null;
+  durationMs: number;
+  artUrl?: string | null;
+  isrc?: string | null;
+  explicit: boolean;
+  inLibrary?: boolean;
+  itemType: string;
+}
+
+export interface OnlineAlbumResult {
+  id: string;
+  provider: string;
+  providerName: string;
+  providerAlbumId: string;
+  title: string;
+  artists: string[];
+  year?: number | null;
+  trackCount?: number | null;
+  artUrl?: string | null;
+  alsoOn?: string[];
+  itemType: string;
+}
+
+export interface OnlineArtistResult {
+  id: string;
+  provider: string;
+  providerName: string;
+  providerArtistId: string;
+  name: string;
+  artUrl?: string | null;
+  alsoOn?: string[];
+  itemType: string;
+}
+
+export interface OnlinePlaylistResult {
+  id: string;
+  provider: string;
+  providerName: string;
+  providerPlaylistId: string;
+  title: string;
+  creator?: string | null;
+  trackCount?: number | null;
+  artUrl?: string | null;
+  alsoOn?: string[];
+  itemType: string;
+}
+
+export interface OnlineSearchProviderStatus {
+  id: string;
+  name: string;
+  state: string;
+  error?: string | null;
+  elapsedMs: number;
+  hitCounts: { tracks: number; albums: number; artists: number; playlists: number };
+}
+export interface ProviderSearchOutcome {
+  provider: string;
   /** A quiet, provider-scoped message. Never delays the other providers. */
   failure: string | null;
 }
@@ -313,6 +387,16 @@ export interface ExtensionSurface {
   enqueueDownload(track: ProviderTrack): Promise<QueueJob>;
 
   searchProviders(query: string, limit: number): Promise<ProviderSearchOutcome[]>;
+  onlineSearch(
+    requestId: string,
+    query: string,
+    types: string[],
+    limit: number,
+    offset: number,
+  ): Promise<OnlineSearchResponse>;
+  onlineSearchCancel(requestId: string): Promise<void>;
+  providerDetail(kind: string, provider: string, id: string): Promise<any>;
+  providerHome(): Promise<any>;
   providerLyrics(trackId: number): Promise<ProviderLyrics | null>;
 
   onExtensionProgress(handler: (progress: InstallProgress) => void): Promise<UnlistenFn>;
@@ -337,6 +421,10 @@ export const COMMANDS = {
   queueRetry: "queue_retry",
   queueEnqueue: "queue_enqueue",
   search: "search_providers",
+  onlineSearch: "online_search",
+  onlineSearchCancel: "online_search_cancel",
+  providerDetail: "provider_detail",
+  providerHome: "provider_home",
   lyrics: "provider_lyrics",
 } as const;
 
@@ -368,6 +456,11 @@ export const tauriExtensions: ExtensionSurface = {
   enqueueDownload: (track) => invoke(COMMANDS.queueEnqueue, { track }),
 
   searchProviders: (query, limit) => invoke(COMMANDS.search, { query, limit }),
+  onlineSearch: (requestId, query, types, limit, offset) =>
+    invoke(COMMANDS.onlineSearch, { requestId, query, types, limit, offset }),
+  onlineSearchCancel: (requestId) => invoke(COMMANDS.onlineSearchCancel, { requestId }),
+  providerDetail: (kind, provider, id) => invoke(COMMANDS.providerDetail, { kind, provider, id }),
+  providerHome: () => invoke(COMMANDS.providerHome),
   providerLyrics: (trackId) => invoke(COMMANDS.lyrics, { trackId }),
 
   onExtensionProgress: (handler) =>
@@ -1119,6 +1212,57 @@ export const demoExtensions: ExtensionSurface = {
         failure: null,
       };
     });
+  },
+
+  async onlineSearch(requestId, query, types, limit, _offset) {
+    await delay(80);
+    const providers = providerGroups()
+      .find((group) => group.capability === "metadata")
+      ?.providers.filter((p) => p.health.state !== "unhealthy") ?? [];
+    const tracks = providers.flatMap((provider) => [
+      {
+        id: `${provider.id}:demo-1`,
+        provider: provider.id,
+        providerName: provider.displayName,
+        providerTrackId: `demo-1`,
+        title: `${query} (${provider.displayName} mix)`,
+        artists: ["Various"],
+        album: "Synthetic provider result",
+        durationMs: 214_000,
+        artUrl: null,
+        explicit: false,
+        inLibrary: false,
+        itemType: "track",
+      },
+    ]).slice(0, limit);
+    return {
+      requestId,
+      query,
+      tracks: types.length === 0 || types.includes("tracks") ? tracks : [],
+      albums: [],
+      artists: [],
+      playlists: [],
+      providers: providers.map((p) => ({
+        id: p.id,
+        name: p.displayName,
+        state: "ok",
+        error: null,
+        elapsedMs: 80,
+        hitCounts: { tracks: tracks.length, albums: 0, artists: 0, playlists: 0 },
+      })),
+      elapsedMs: 80,
+      cancelled: false,
+    };
+  },
+
+  async onlineSearchCancel(_requestId) {},
+
+  async providerDetail(_kind, _provider, _id) {
+    return null;
+  },
+
+  async providerHome() {
+    return { providers: [] };
   },
 
   async providerLyrics(trackId) {

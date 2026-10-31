@@ -13,10 +13,9 @@
 //! here, where the reason is known.
 //!
 //! What is deliberately absent: `setTimeout`/`setInterval` (there is no event
-//! loop to schedule them on), `credentials`, `auth`, `file.download`,
-//! `file.downloadSegments` and `gobackend.getLyricsLRC`/`getAudioQuality`. Each
-//! is owned by a later task or unimplemented, and each throws a message naming
-//! itself rather than pretending to work. `EXTENSIONS.md` records the same list.
+//! loop to schedule them on), `credentials` and `auth`. Each throws a message
+//! naming itself rather than pretending to work. `EXTENSIONS.md` records the
+//! same list.
 
 use crate::runtime::crypto;
 use crate::runtime::ffmpeg::{ConvertOptions, Ffmpeg, FfmpegError};
@@ -461,6 +460,13 @@ impl HostServices {
         self.cancelled.load(Ordering::Relaxed)
     }
 
+    /// The shared cancellation flag itself, so a host-initiated transfer stops
+    /// the instant `cancel` is called from any thread, not just when package
+    /// code next asks `utils`.
+    pub fn cancellation_flag(&self) -> &AtomicBool {
+        &self.cancelled
+    }
+
     /// Milliseconds left in the current call, or 0 outside a call.
     pub fn remaining_ms(&self) -> u64 {
         self.clock.get().map(CallClock::remaining_ms).unwrap_or(0)
@@ -540,6 +546,362 @@ impl HostServices {
         sandbox
             .resolve(requested)
             .map_err(|error| error.to_string())
+    }
+}
+
+/// The engine behind `file.download` and `file.downloadSegments`.
+///
+/// The transfer mechanics are `qext::download`'s: one engine whose byte
+/// ceiling, resume handling, cancellation checks and progress throttling are
+/// already tested. This module only maps package-shaped arguments into
+/// `TransferPlan`s and the outcome back into the object the shipped packages
+/// read. Untrusted code chooses the target path (resolved through the file
+/// sandbox here, never in the engine) and the segment list; it cannot choose
+/// the URL check or where partial bytes live.
+pub mod transfer {
+    use crate::download::{self, Downloader, TransferError, TransferLimits, TransferPlan};
+    use crate::runtime::crypto;
+    use serde_json::json;
+    use std::fs::{self, File, OpenOptions};
+    use std::io;
+    use std::path::{Path, PathBuf};
+
+    use super::HostServices;
+
+    /// A segment manifest lists one URL per media fragment. A hostile list
+    /// should not be able to pin the runtime thread down for its full patience,
+    /// but real manifests are short: an initialisation fragment plus media.
+    pub const MAX_SEGMENT_COUNT: usize = 4096;
+
+    /// A failure in package words. `kind` matches the `error_type` strings the
+    /// shipped packages already branch on; the message `download cancelled` is
+    /// what `tidal-web` scans for.
+    pub struct TransferFailure {
+        pub message: String,
+        pub kind: &'static str,
+    }
+
+    /// Bytes that ended up inside the final file.
+    pub type TransferOutcome = Result<u64, TransferFailure>;
+
+    /// Deterministic per-address temp suffix, so a re-run of the same address
+    /// continues from its own partial bytes and no one else's. Hex only, and
+    /// short enough for the job-id rules `download.rs` enforces.
+    pub(crate) fn job_id_for(url: &str, tracked: &str) -> String {
+        crypto::sha256_hex(format!("{tracked}\n{url}").as_bytes())[..32].to_string()
+    }
+
+    /// Package words for one transfer error.
+    fn deny(error: &TransferError) -> TransferFailure {
+        let mut message = error.to_string();
+        let kind = match error {
+            TransferError::InvalidUrl { .. } | TransferError::InvalidJobId { .. } => "invalid_input",
+            TransferError::Denied { .. } => "forbidden",
+            TransferError::Http { status: 404, .. } => "not_found",
+            TransferError::Http { status: 429, .. } => "rate_limited",
+            TransferError::Http { .. } => "http_error",
+            TransferError::Timeout { .. } => "timeout",
+            TransferError::TooLarge { .. } => "too_large",
+            TransferError::RangeMismatch { .. } => "range_mismatch",
+            TransferError::ShortBody { .. } => "incomplete",
+            TransferError::Cancelled => {
+                message = "download cancelled".to_string();
+                "cancelled"
+            }
+            TransferError::Io { .. } => "io_error",
+            TransferError::Transport(_) => "download_error",
+        };
+        TransferFailure { message, kind }
+    }
+
+    /// A transfer inherits its read timeout from the host's `http` permission
+    /// so a package never stalls longer than its own network calls would.
+    fn limits_for(host: &HostServices) -> TransferLimits {
+        match host.http() {
+            Some(http) => TransferLimits {
+                read_timeout: http.limits().timeout,
+                ..TransferLimits::default()
+            },
+            None => TransferLimits::default(),
+        }
+    }
+
+    fn remove_quietly(path: &Path) {
+        let _ = fs::remove_file(path);
+    }
+
+    /// Stream one URL into `output`, which the caller has already resolved
+    /// through the file sandbox. Progress reports `(written, total)` with
+    /// `total` zero when the server sent no `Content-Length`.
+    pub fn fetch_one(
+        host: &HostServices,
+        url: &str,
+        output: &Path,
+        headers: &[(String, String)],
+        resume: bool,
+        report_progress: &mut dyn FnMut(u64, u64),
+    ) -> TransferOutcome {
+        let Some(http) = host.http() else {
+            return Err(TransferFailure {
+                message: "file.download is unavailable: this host grants no network access"
+                    .to_string(),
+                kind: "unavailable",
+            });
+        };
+
+        let job_id = job_id_for(url, &output.to_string_lossy());
+        let partial = download::partial_path(output, &job_id).map_err(|error| deny(&error))?;
+        let resume_from = if resume {
+            fs::metadata(&partial).map(|entry| entry.len()).unwrap_or(0)
+        } else {
+            0
+        };
+
+        let mut plan = TransferPlan::new(url, output, &job_id).resuming_from(resume_from);
+        for (name, value) in headers {
+            plan = plan.with_header(name.clone(), value.clone());
+        }
+
+        let downloader = Downloader::new(limits_for(host)).with_allowlist(http.allowlist().clone());
+        downloader
+            .transfer(&plan, host.cancellation_flag(), |update| {
+                report_progress(update.written, update.total.unwrap_or(0));
+            })
+            .map(|report| report.bytes_written)
+            .map_err(|error| deny(&error))
+    }
+
+    /// Stream a segment manifest into one file: each URL is fetched to a
+    /// scratch file, appended to a shared partial in order, and then dropped.
+    /// With `persistentCheckpoint` a re-run that survived recordings skips the
+    /// segments already inside the partial rather than re-fetching them.
+    pub fn fetch_segments(
+        host: &HostServices,
+        urls: &[String],
+        output: &Path,
+        headers: &[(String, String)],
+        persistent_checkpoint: bool,
+        report_progress: &mut dyn FnMut(u64, u64, u64, u64),
+    ) -> TransferOutcome {
+        if urls.is_empty() {
+            return Err(TransferFailure {
+                message: "no segment urls to download".to_string(),
+                kind: "invalid_input",
+            });
+        }
+        if urls.len() > MAX_SEGMENT_COUNT {
+            return Err(TransferFailure {
+                message: format!("segment list is longer than the {MAX_SEGMENT_COUNT} urls accepted"),
+                kind: "too_large",
+            });
+        }
+
+        let job_id = job_id_for(&urls[0], &output.to_string_lossy());
+        let partial = download::partial_path(output, &job_id).map_err(|error| deny(&error))?;
+        let checkpoint = sibling(&partial, format!("{}.ck", job_id));
+
+        let (mut completed, mut written) = carried_progress(
+            persistent_checkpoint.then_some(checkpoint.as_path()),
+            &partial,
+            urls.len(),
+        );
+
+        let total = urls.len() as u64;
+        let mut index = completed;
+        while index < total {
+            if host.is_cancelled() {
+                return Err(deny(&TransferError::Cancelled));
+            }
+
+            let scratch = sibling(&partial, format!("{}.seg{index}", job_id));
+            let scratch_partial = download::partial_path(&scratch, &job_id).map_err(|error| deny(&error))?;
+            let mut appended = 0u64;
+            let fetched = fetch_one(host, &urls[usize::try_from(index).unwrap_or(0)], &scratch, headers, false, &mut |chunk, _total| {
+                appended = chunk;
+                report_progress(written + chunk, 0, index + 1, total);
+            });
+
+            if let Err(failure) = fetched {
+                remove_quietly(&scratch_partial);
+                remove_quietly(&scratch);
+                // A cancelled transfer keeps its recording: the caller is
+                // pausing, not failing, and the next attempt continues there.
+                if failure.kind != "cancelled" && !persistent_checkpoint {
+                    remove_quietly(&partial);
+                    remove_quietly(&checkpoint);
+                }
+                return Err(failure);
+            }
+
+            if let Some(failure) = append_file(&scratch, &partial) {
+                remove_quietly(&scratch);
+                return Err(failure);
+            }
+            remove_quietly(&scratch);
+
+            written += appended;
+            completed = index + 1;
+            if persistent_checkpoint {
+                let _ = fs::write(
+                    &checkpoint,
+                    json!({ "completed": completed, "bytes": written }).to_string(),
+                );
+            }
+            report_progress(written, 0, completed, total);
+            index += 1;
+        }
+
+        // Hand the file over under its real name; the partial naming is an
+        // engine detail no package ever reads.
+        fs::rename(&partial, output).map_err(|error| TransferFailure {
+            message: format!("cannot finish {}: {error}", output.display()),
+            kind: "io_error",
+        })?;
+        remove_quietly(&checkpoint);
+
+        Ok(written)
+    }
+
+    /// `<name>.ck` next to one partial: where the segment recording lives.
+    fn sibling(partial: &Path, suffix: String) -> PathBuf {
+        let mut path = partial.to_path_buf();
+        let name = path
+            .file_name()
+            .map(|entry| entry.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        path.set_file_name(format!("{name}.{suffix}"));
+        path
+    }
+
+    /// How much the partial already holds, and which segments that covers.
+    /// A recording whose byte count disagrees with the partial is stale; start
+    /// from zero rather than append a second copy of the same segment.
+    fn carried_progress(
+        checkpoint: Option<&Path>,
+        partial: &Path,
+        segment_total: usize,
+    ) -> (u64, u64) {
+        let Some(checkpoint) = checkpoint else {
+            return (0, 0);
+        };
+        let Ok(text) = fs::read_to_string(checkpoint) else {
+            return (0, 0);
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+            return (0, 0);
+        };
+
+        let recorded_done = value
+            .get("completed")
+            .and_then(|entry| entry.as_u64())
+            .unwrap_or(0);
+        let recorded_bytes = value
+            .get("bytes")
+            .and_then(|entry| entry.as_u64())
+            .unwrap_or(0);
+        let partial_bytes = fs::metadata(partial).map(|entry| entry.len()).unwrap_or(0);
+
+        if recorded_done <= segment_total as u64 && partial_bytes == recorded_bytes {
+            (recorded_done, recorded_bytes)
+        } else {
+            (0, 0)
+        }
+    }
+
+    /// Append every byte of one scratch file to the shared partial.
+    fn append_file(source: &Path, target: &Path) -> Option<TransferFailure> {
+        let appending = OpenOptions::new().create(true).append(true).open(target);
+        let mut appending = match appending {
+            Ok(file) => file,
+            Err(error) => {
+                return Some(TransferFailure {
+                    message: format!("cannot open {}: {error}", target.display()),
+                    kind: "io_error",
+                });
+            }
+        };
+        let mut reading = match File::open(source) {
+            Ok(file) => file,
+            Err(error) => {
+                return Some(TransferFailure {
+                    message: format!("cannot read downloaded segment: {error}"),
+                    kind: "io_error",
+                });
+            }
+        };
+
+        match io::copy(&mut reading, &mut appending) {
+            Ok(_) => None,
+            Err(error) => Some(TransferFailure {
+                message: format!("cannot append segment bytes: {error}"),
+                kind: "io_error",
+            }),
+        }
+    }
+}
+
+/// `options` as the JS wrapper reduces them: headers, resume flags.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransferOptions {
+    #[serde(default)]
+    headers: Option<Value>,
+    #[serde(default)]
+    resume: bool,
+    #[serde(default)]
+    persistent_checkpoint: bool,
+}
+
+/// Parsed transfer options: the headers a package sent plus the two flags the
+/// transfer engine acts on.
+#[derive(Debug, Default)]
+struct TransferParams {
+    headers: Vec<(String, String)>,
+    resume: bool,
+    persistent_checkpoint: bool,
+}
+
+/// Parse the options the JS wrapper serialised, tolerating an absent one
+/// entirely. Non-string header values are dropped rather than rejected: the
+/// packages send plain objects with plain strings.
+fn parse_transfer_options(text: &str) -> Result<TransferParams, String> {
+    let options: TransferOptions =
+        serde_json::from_str(text).map_err(|error| format!("transfer options are invalid: {error}"))?;
+
+    let mut headers = Vec::new();
+    if let Some(Value::Object(map)) = &options.headers {
+        for (name, value) in map {
+            let Some(text) = value.as_str() else {
+                continue;
+            };
+            if name.trim().is_empty() {
+                return Err("a transfer header name is empty".to_string());
+            }
+            headers.push((name.clone(), text.to_string()));
+        }
+    }
+
+    Ok(TransferParams {
+        headers,
+        resume: options.resume,
+        persistent_checkpoint: options.persistent_checkpoint,
+    })
+}
+
+/// The package-facing result for one host-side transfer.
+fn transfer_envelope(requested: &str, outcome: transfer::TransferOutcome) -> String {
+    match outcome {
+        Ok(bytes) => ok_envelope(serde_json::json!({
+            "success": true,
+            "path": requested,
+            "bytes": bytes,
+        })),
+        Err(failure) => ok_envelope(serde_json::json!({
+            "success": false,
+            "path": requested,
+            "error": failure.message,
+            "error_type": failure.kind,
+        })),
     }
 }
 
@@ -882,8 +1244,7 @@ pub fn install<'js>(ctx: &Ctx<'js>, host: Arc<HostServices>) -> rquickjs::Result
         ctx,
         &globals,
         "__qext_file_move",
-        move |from: String, to: String| -> String {
-            let source = match move_host.resolve_file(&from) {
+        move |from: String, to: String| -> String {            let source = match move_host.resolve_file(&from) {
                 Ok(resolved) => resolved,
                 Err(error) => return error_envelope(error),
             };
@@ -912,6 +1273,87 @@ pub fn install<'js>(ctx: &Ctx<'js>, host: Arc<HostServices>) -> rquickjs::Result
                     Err(_) => error_envelope(format!("cannot move {from:?} to {to:?}: {rename_error}")),
                 },
             }
+        },
+    )?;
+
+    // ---- file transfers ----------------------------------------------------
+    // The real byte streaming behind `file.download` / `file.downloadSegments`.
+    // The natives return the outcome object the packages read; the JS wrapper
+    // keeps the progress callback out of the JSON bridge, since a function has
+    // no meaning there.
+    let transfer_host = Arc::clone(&host);
+    bind(
+        ctx,
+        &globals,
+        "__qext_file_download",
+        move |url: String,
+              path: String,
+              options_json: String,
+              on_progress: Option<Function<'js>>|
+              -> String {
+            let params = match parse_transfer_options(&options_json) {
+                Ok(parsed) => parsed,
+                Err(error) => return error_envelope(error),
+            };
+            let resolved = match transfer_host.resolve_file(&path) {
+                Ok(resolved) => resolved,
+                Err(error) => return error_envelope(error),
+            };
+
+            let result = transfer::fetch_one(
+                &transfer_host,
+                &url,
+                &resolved,
+                &params.headers,
+                params.resume,
+                &mut |written, total| {
+                    if let Some(report) = &on_progress {
+                        // A progress listener's return value has no meaning to
+                        // anyone, so a coercion failure is dropped, not fatal.
+                        let _ = report.call::<_, ()>((written, total));
+                    }
+                },
+            );
+            transfer_envelope(&path, result)
+        },
+    )?;
+
+    let segments_host = Arc::clone(&host);
+    bind(
+        ctx,
+        &globals,
+        "__qext_file_download_segments",
+        move |urls_json: String,
+              path: String,
+              options_json: String,
+              on_progress: Option<Function<'js>>|
+              -> String {
+            let urls: Vec<String> = match serde_json::from_str(&urls_json) {
+                Ok(urls) => urls,
+                Err(_) => return error_envelope("segment urls must be a list of strings"),
+            };
+            let params = match parse_transfer_options(&options_json) {
+                Ok(parsed) => parsed,
+                Err(error) => return error_envelope(error),
+            };
+            let resolved = match segments_host.resolve_file(&path) {
+                Ok(resolved) => resolved,
+                Err(error) => return error_envelope(error),
+            };
+
+            let result = transfer::fetch_segments(
+                &segments_host,
+                &urls,
+                &resolved,
+                &params.headers,
+                params.persistent_checkpoint,
+                &mut |written, total, segments_done, segments_total| {
+                    if let Some(report) = &on_progress {
+                        let _ = report.call::<_, ()>((written, total, segments_done, segments_total));
+                    }
+                },
+            );
+            transfer_envelope(&path, result)
         },
     )?;
 
@@ -1641,9 +2083,34 @@ var file = {
   move: function (from, to) {
     return __qext_unwrap(__qext_file_move(__qext_text(from), __qext_text(to)));
   },
-  download: function () { __qext_unavailable('file.download'); },
-  downloadSegments: function (segments) { return segments; }
+  download: function (url, path, options) {
+    options = options || {};
+    return __qext_unwrap(__qext_file_download(
+      __qext_text(url),
+      __qext_text(path),
+      __qext_transfer_options(options),
+      typeof options.onProgress === 'function' ? options.onProgress : null
+    ));
+  },
+  downloadSegments: function (urls, path, options) {
+    options = options || {};
+    return __qext_unwrap(__qext_file_download_segments(
+      JSON.stringify(urls),
+      __qext_text(path),
+      __qext_transfer_options(options),
+      typeof options.onProgress === 'function' ? options.onProgress : null
+    ));
+  }
 };
+
+function __qext_transfer_options(options) {
+  var headers = (options.headers && typeof options.headers === 'object') ? options.headers : null;
+  return JSON.stringify({
+    headers: headers,
+    resume: options.resume === true,
+    persistentCheckpoint: options.persistentCheckpoint === true
+  });
+}
 
 // ==================== logging ====================
 
@@ -2192,6 +2659,207 @@ mod tests {
         assert_eq!(value, json!([404, false, "missing"]));
     }
 
+    /// The engine assigns every transferred address its own partial file name;
+    /// tests need it to stage resumes the way a retry would.
+    fn partial_name_for(base: &Path, url: &str, tracked: &str) -> PathBuf {
+        let job = transfer::job_id_for(url, tracked);
+        let name = base
+            .file_name()
+            .and_then(|entry| entry.to_str())
+            .unwrap_or_default();
+        base.with_file_name(format!("{name}.{job}.part"))
+    }
+
+    #[test]
+    fn file_download_streams_bytes_into_the_sandbox_with_headers_and_progress() {
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink = seen.clone();
+        let base = spawn_server(move |request| {
+            if let Some(header) = request.header("x-probe") {
+                sink.lock().expect("sink lock").push(header.to_string());
+            }
+            (200, vec![], b"0123456789".to_vec())
+        });
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let host = Arc::new(HostServices::new(HostConfig {
+            data_dir: Some(directory.path().to_path_buf()),
+            http: Some(HostHttp::new(
+                NetworkAllowlist::from_patterns(&["127.0.0.1".to_string()]),
+                HttpLimits::default(),
+            )),
+            ..HostConfig::default()
+        }));
+
+        let value = probe(
+            Arc::clone(&host),
+            &format!(
+                "(function () {{ \
+                    var progress = []; \
+                    var result = file.download('{base}/audio.flac', 'downloads/song.flac', {{ \
+                        headers: {{ 'X-Probe': 'on' }}, \
+                        onProgress: function (written, total) {{ progress.push([written, total]); }} \
+                    }}); \
+                    var text = file.read('downloads/song.flac'); \
+                    return [result.success, result.path, result.bytes, text, progress.length > 0, progress[progress.length - 1][0]]; \
+                }})()"
+            ),
+        );
+
+        assert_eq!(
+            value,
+            json!([true, "downloads/song.flac", 10, "0123456789", true, 10])
+        );
+        assert_eq!(*seen.lock().expect("sink lock"), vec!["on".to_string()]);
+    }
+
+    #[test]
+    fn file_download_resumes_a_recorded_partial_with_a_range_request() {
+        let seen_range = Arc::new(Mutex::new(Option::<String>::None));
+        let records = seen_range.clone();
+        let base = spawn_server(move |request| {
+            match request.header("range") {
+                // A real server answers a range with the remainder plus the
+                // Content-Range the engine verifies.
+                Some(range) => {
+                    *records.lock().expect("sink lock") = Some(range.to_string());
+                    (
+                        206,
+                        vec![("Content-Range".into(), "bytes 5-9/10".into())],
+                        b"56789".to_vec(),
+                    )
+                }
+                None => (200, vec![], b"0123456789".to_vec()),
+            }
+        });
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let root = directory.path().to_path_buf();
+        let host = Arc::new(HostServices::new(HostConfig {
+            data_dir: Some(root.clone()),
+            http: Some(HostHttp::new(
+                NetworkAllowlist::from_patterns(&["127.0.0.1".to_string()]),
+                HttpLimits::default(),
+            )),
+            ..HostConfig::default()
+        }));
+
+        let url = format!("{base}/audio.flac");
+        std::fs::create_dir_all(root.join("downloads")).expect("staging");
+        // The sandbox serves canonical paths (a verbatim prefix on Windows), so
+        // the staged name has to be derived the same way.
+        let downloads = std::fs::canonicalize(root.join("downloads")).expect("canonical dir");
+        let output = downloads.join("song.flac");
+        // Stage the bytes a first attempt recorded, exactly where the engine
+        // names them.
+        let staged = partial_name_for(&output, &url, &output.to_string_lossy());
+        std::fs::write(&staged, b"01234").expect("stage partial");
+
+        let value = probe(
+            Arc::clone(&host),
+            &format!(
+                "(function () {{ \
+                    var result = file.download('{url}', 'downloads/song.flac', {{ resume: true }}); \
+                    return [result.success, file.read('downloads/song.flac')]; \
+                }})()"
+            ),
+        );
+
+        // The resumed file is the staged prefix plus what the 206 delivered.
+        assert_eq!(value, json!([true, "0123456789"]));
+        assert_eq!(
+            *seen_range.lock().expect("sink lock"),
+            Some("bytes=5-".to_string())
+        );
+    }
+
+    #[test]
+    fn file_download_segments_concatenate_in_order_and_report_each_one() {
+        let base = spawn_server(move |request| match request.path.as_str() {
+            "/init" => (200, vec![], b"aa".to_vec()),
+            "/media-1" => (200, vec![], b"bb".to_vec()),
+            "/media-2" => (200, vec![], b"ccc".to_vec()),
+            "/media-3" => (200, vec![], b"dddd".to_vec()),
+            _ => (404, vec![], b"missing".to_vec()),
+        });
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let host = Arc::new(HostServices::new(HostConfig {
+            data_dir: Some(directory.path().to_path_buf()),
+            http: Some(HostHttp::new(
+                NetworkAllowlist::from_patterns(&["127.0.0.1".to_string()]),
+                HttpLimits::default(),
+            )),
+            ..HostConfig::default()
+        }));
+
+        let value = probe(
+            Arc::clone(&host),
+            &format!(
+                "(function () {{ \
+                    var line = []; \
+                    var result = file.downloadSegments( \
+                        ['{base}/init', '{base}/media-1', '{base}/media-2', '{base}/media-3'], \
+                        'downloads/manifest.m4a', \
+                        {{ \
+                            persistentCheckpoint: true, \
+                            onProgress: function (written, total, completed, totalSegments) {{ \
+                                line.push([completed, totalSegments]); \
+                            }} \
+                        }} \
+                    ); \
+                    return [result.success, result.bytes, file.read('downloads/manifest.m4a'), line[line.length - 1]]; \
+                }})()"
+            ),
+        );
+
+        assert_eq!(value, json!([true, 11, "aabbcccdddd", [4, 4]]));
+    }
+
+    #[test]
+    fn file_download_reports_a_host_without_network_access_as_unavailable() {
+        let base = spawn_server(|_| (200, vec![], b"secret".to_vec()));
+        let directory = tempfile::tempdir().expect("temp dir");
+        let host = Arc::new(HostServices::new(HostConfig {
+            data_dir: Some(directory.path().to_path_buf()),
+            // Deliberately no network permission at all.
+            ..HostConfig::default()
+        }));
+
+        let value = probe(
+            Arc::clone(&host),
+            &format!(
+                "(function () {{ var result = file.download('{base}/audio.flac', 'song.flac', {{}}); return [result.success, result.error_type]; }})()"
+            ),
+        );
+
+        assert_eq!(value, json!([false, "unavailable"]));
+    }
+
+    #[test]
+    fn file_download_reports_a_host_cancellation_in_package_words() {
+        let base = spawn_server(|_| (200, vec![], b"never read".to_vec()));
+        let directory = tempfile::tempdir().expect("temp dir");
+        let host = Arc::new(HostServices::new(HostConfig {
+            data_dir: Some(directory.path().to_path_buf()),
+            http: Some(HostHttp::new(
+                NetworkAllowlist::from_patterns(&["127.0.0.1".to_string()]),
+                HttpLimits::default(),
+            )),
+            ..HostConfig::default()
+        }));
+        host.cancel();
+
+        let value = probe(
+            host,
+            &format!(
+                "(function () {{ var result = file.download('{base}/audio.flac', 'song.flac', {{}}); return [result.success, result.error, result.error_type]; }})()"
+            ),
+        );
+
+        assert_eq!(value, json!([false, "download cancelled", "cancelled"]));
+    }
+
     #[test]
     fn log_records_reach_the_host_sink() {
         let host = Arc::new(HostServices::default());
@@ -2269,7 +2937,6 @@ mod tests {
         for (expression, needle) in [
             ("credentials.get('x')", "credentials.get"),
             ("auth.openAuthUrl('https://x.test')", "auth.openAuthUrl"),
-            ("file.download('https://x.test/a', 'a.flac')", "file.download"),
         ] {
             let value = default_probe(&format!(
                 "(function () {{ try {{ {expression}; return 'allowed'; }} catch (error) {{ return error.message; }} }})()"

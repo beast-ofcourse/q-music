@@ -38,7 +38,7 @@ The frontend's `ExtensionSurface` interface declares 16 commands. Only 3 are imp
 | `search_providers` | ✅ | ✅ | Working |
 | `provider_lyrics` | ✅ | ❌ | Missing |
 
-**Impact**: Extensions panel, Providers panel, Downloads panel, and provider lyrics don't work in desktop mode. They work in browser/demo mode.
+**Impact (audit-time)**: Extensions panel, Providers panel, Downloads panel, and provider lyrics don't work in desktop mode. They work in browser/demo mode. *Resolved by Phases 4–5; see 5.3 for current status.*
 
 #### High: Dead Code
 
@@ -88,6 +88,10 @@ The frontend's `ExtensionSurface` interface declares 16 commands. Only 3 are imp
 - File sandbox: ✅ (path validation)
 
 ## Phase 2 — Rust and Tauri Integration
+
+> **Status (2026-10)**: all commands listed below are registered and implemented
+> in `src-tauri/src/ext_commands.rs`; `extensions_invoke_action` verifies the
+> extension but has no package-side counterpart to dispatch to. See 5.3.
 
 ### 2.1 Missing Commands to Implement
 
@@ -208,9 +212,9 @@ Connection pooling is **not needed** for this desktop application. The `Library`
 | Extension updates | ⚠️ | ⚠️ | Not explicitly tested |
 | Extension removal | ✅ | ✅ | uninstall implemented |
 | Provider failure handling | ✅ | ✅ | Health monitoring, retry |
-| Download progress | ✅ | ⚠️ | Queue returns empty in desktop |
-| Download cancellation | ✅ | ⚠️ | Not fully wired |
-| Download retries | ✅ | ⚠️ | Not fully wired |
+| Download progress | ✅ | ✅ | Worker publishes stage/percent events |
+| Download cancellation | ✅ | ✅ | Shared host cancellation flag |
+| Download retries | ✅ | ✅ | Streak reset, job re-queued |
 | Metadata embedding | ✅ | ✅ | qcore::embed |
 
 ### 5.2 Extension Improvements Made
@@ -225,10 +229,23 @@ Connection pooling is **not needed** for this desktop application. The `Library`
 
 ### 5.3 Remaining Gaps
 
-- Download queue in desktop mode does not actually download files (needs full download executor integration)
-- Extension settings are not persisted across restarts (in-memory only)
-- Provider health is not tracked in desktop mode (always returns healthy)
-- Extension invoke_action not yet wired
+Closed: the download queue now runs a real executor (`spawn_download_worker`) that
+drives a real package-side `download` call, publishes stage/percent progress, and
+embeds tags into the finished file; extension settings and provider priority
+persist in `<extensions>/state.json` across restarts; provider health (≥2
+consecutive failures → unhealthy, `providers_retry` clears) is tracked in
+desktop mode; `extensions_install` fetches the Mornye registry document, stages
+the `.sflx`, and hands it to the store for sha256/id verification. The host now
+implements `file.download` / `file.downloadSegments` natively through the `qext`
+transfer engine, so packages stream real bytes with resume, headers, progress
+and cancellation.
+
+Still open:
+
+- `extensions_invoke_action` verifies the extension exists but has no
+  package-side counterpart to dispatch to (the manifest format defines no named
+  actions) — recorded here as the one command without real behaviour.
+
 
 ## Phase 6 — UI/UX Consistency Audit
 
@@ -352,13 +369,13 @@ Connection pooling is **not needed** for this desktop application. The `Library`
 ## Summary
 
 The application is in good shape. Core music player functionality is solid. The main remaining gaps are:
-1. Download queue integration in desktop mode
+1. ~~Download queue integration in desktop mode~~ (closed: real worker executor, see 5.3)
 2. Position persistence across restarts
 3. Dead code cleanup
 
 ### Overall Test Results
 
-- `qext`: 267 tests passed
+- `qext`: 273 lib tests + 6 real-package tests passed
 - `qcore`: 49 tests passed
 - Frontend: TypeScript 0 errors, Vite build success
-- Total: 316 tests, all passing
+- Total: 328 tests, all passing
