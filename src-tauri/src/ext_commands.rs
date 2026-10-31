@@ -13,8 +13,6 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::state::AppState;
-
 /// View struct returned to the frontend (camelCase, matching `extensions.ts`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +92,9 @@ pub async fn search_providers(
         .lock()
         .map_err(|_| "extension store poisoned".to_string())?;
 
+    // Ensure data directory exists.
+    let _ = std::fs::create_dir_all(ext_state.root.join(".data"));
+
     let scan = store.scan();
     let mut outcomes: Vec<serde_json::Value> = Vec::new();
 
@@ -102,10 +103,31 @@ pub async fn search_providers(
             continue;
         }
 
-        // Activate if not already active.
+        // Activate if not already active, with per-extension host services.
         if !store.is_active(&installed.id) {
-            let host = Arc::new(HostServices::default());
-            if let Err(_) = store.activate(&installed.id, host) {
+            let installed_info = store.installed(&installed.id);
+            let allowlist = installed_info
+                .as_ref()
+                .and_then(|i| {
+                    let manifest_text = std::fs::read_to_string(i.manifest_path()).ok()?;
+                    let manifest: qext::manifest::Manifest = serde_json::from_str(&manifest_text).ok()?;
+                    Some(qext::runtime::permissions::NetworkAllowlist::from_patterns(&manifest.permissions.network))
+                })
+                .unwrap_or_default();
+            let http = qext::runtime::http::HostHttp::new(
+                allowlist,
+                qext::runtime::http::HttpLimits::default(),
+            );
+            let config = qext::runtime::polyfills::HostConfig {
+                app_version: "4.10.0".to_string(),
+                user_agent: "Q-Music/0.1.0".to_string(),
+                data_dir: Some(ext_state.root.join(".data").join(&installed.id)),
+                http: Some(http),
+                ffmpeg: None,
+            };
+            let host = Arc::new(qext::runtime::polyfills::HostServices::new(config));
+            if let Err(e) = store.activate(&installed.id, host) {
+                eprintln!("Failed to activate {}: {}", installed.id, e);
                 continue;
             }
         }
