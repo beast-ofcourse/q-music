@@ -8,11 +8,8 @@ import "../styles/lyrics-view.css";
 /**
  * Full-screen synced lyrics view.
  *
- * Cinematic, minimal, immersive: the active line is centered and scaled,
- * past lines fade up, future lines fade down. Blurred artwork behind.
- * Auto-scrolls to keep the active line centered, but allows manual
- * scrolling without immediately forcing back. A "return to current" button
- * appears when the user scrolls away.
+ * Two-column layout: album artwork (35%) on the left, lyrics (65%) on the right.
+ * Clean, minimal, high-contrast. No glassmorphism, no excessive blur.
  */
 export function LyricsView() {
   const { lyrics, lyricsLoading, snapshot, seek, currentTrack, setView, loadLyrics } =
@@ -44,7 +41,6 @@ export function LyricsView() {
     activeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeIndex, userScrolled]);
 
-  // Detect manual scroll.
   const handleScroll = useCallback(() => {
     if (scrollTimerRef.current) {
       clearTimeout(scrollTimerRef.current);
@@ -87,21 +83,6 @@ export function LyricsView() {
   if (!lyrics || lyrics.lines.length === 0) {
     return (
       <div className="lyrics-view">
-        {artwork && (
-          <div
-            className="lyrics-view-bg"
-            style={{ backgroundImage: `url(${artwork})` }}
-            aria-hidden="true"
-          />
-        )}
-        <button
-          type="button"
-          className="lyrics-view-close"
-          onClick={() => setView({ kind: "library" })}
-          aria-label="Close lyrics view"
-        >
-          <Icon name="close" size={20} />
-        </button>
         <div className="lyrics-view-empty">
           <Icon name="disc" size={48} />
           <p className="lyrics-view-empty-title">No lyrics for this track</p>
@@ -122,15 +103,6 @@ export function LyricsView() {
 
   return (
     <div className="lyrics-view">
-      {/* Subtle artwork background */}
-      {artwork && (
-        <div
-          className="lyrics-view-bg"
-          style={{ backgroundImage: `url(${artwork})` }}
-          aria-hidden="true"
-        />
-      )}
-
       {/* Close button */}
       <button
         type="button"
@@ -141,38 +113,59 @@ export function LyricsView() {
         <Icon name="close" size={20} />
       </button>
 
-      {/* Track info */}
-      <div className="lyrics-view-track">
-        <span className="lyrics-view-track-title">{currentTrack.title}</span>
-        <span className="lyrics-view-track-artist">{currentTrack.artist}</span>
-      </div>
+      {/* Two-column layout */}
+      <div className="lyrics-view-columns">
+        {/* Left: Album artwork + song info (35%) */}
+        <div className="lyrics-view-album">
+          {artwork && (
+            <img
+              src={artwork}
+              alt=""
+              className="lyrics-view-artwork"
+            />
+          )}
+          {!artwork && (
+            <div className="lyrics-view-artwork-fallback" aria-hidden="true">
+              <Icon name="disc" size={64} />
+            </div>
+          )}
+          <div className="lyrics-view-song-info">
+            <span className="lyrics-view-song-title">{currentTrack.title}</span>
+            <span className="lyrics-view-song-artist">{currentTrack.artist}</span>
+          </div>
+        </div>
 
-      {/* Lyrics */}
-      <div className="lyrics-view-scroll" ref={scrollRef} onScroll={handleScroll}>
-        <div className="lyrics-view-spacer" />
-        {lyrics.lines.map((line, index) => {
-          const isActive = index === activeIndex;
-          const isPast = activeIndex >= 0 && index < activeIndex;
-          const isFuture = activeIndex >= 0 && index > activeIndex;
-          return (
-            <button
-              key={`${index}-${line.text}`}
-              ref={isActive ? activeRef : undefined}
-              type="button"
-              className="lyrics-view-line"
-              data-active={isActive}
-              data-past={isPast}
-              data-future={isFuture}
-              disabled={line.timeMs === null}
-              onClick={() => {
-                if (line.timeMs !== null) seek(line.timeMs);
-              }}
-            >
-              {line.text}
-            </button>
-          );
-        })}
-        <div className="lyrics-view-spacer" />
+        {/* Right: Lyrics (65%) */}
+        <div
+          className="lyrics-view-lyrics"
+          ref={scrollRef}
+          onScroll={handleScroll}
+        >
+          <div className="lyrics-view-spacer" />
+          {lyrics.lines.map((line, index) => {
+            const isActive = index === activeIndex;
+            const isPast = activeIndex >= 0 && index < activeIndex;
+            const isFuture = activeIndex >= 0 && index > activeIndex;
+            return (
+              <button
+                key={`${index}-${line.text}`}
+                ref={isActive ? activeRef : undefined}
+                type="button"
+                className="lyrics-view-line"
+                data-active={isActive}
+                data-past={isPast}
+                data-future={isFuture}
+                disabled={line.timeMs === null}
+                onClick={() => {
+                  if (line.timeMs !== null) seek(line.timeMs);
+                }}
+              >
+                {line.text}
+              </button>
+            );
+          })}
+          <div className="lyrics-view-spacer" />
+        </div>
       </div>
 
       {/* Return to current button */}
