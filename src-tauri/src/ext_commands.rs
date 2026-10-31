@@ -351,6 +351,114 @@ pub fn queue_enqueue(
     Ok(job)
 }
 
+/// Fetch lyrics from installed lyrics providers.
+#[tauri::command]
+pub async fn provider_lyrics(
+    ext_state: State<'_, ExtensionState>,
+    track_id: i64,
+) -> Result<serde_json::Value, String> {
+    let mut store = ext_state
+        .store
+        .lock()
+        .map_err(|_| "extension store poisoned".to_string())?;
+
+    let scan = store.scan();
+
+    for installed in &scan.installed {
+        if !installed.enabled {
+            continue;
+        }
+
+        let manifest_text = std::fs::read_to_string(installed.manifest_path()).ok();
+        let manifest: Option<qext::manifest::Manifest> =
+            manifest_text.and_then(|t| serde_json::from_str(&t).ok());
+
+        let provides_lyrics = manifest
+            .as_ref()
+            .map(|m| m.kinds.iter().any(|k| k == "lyrics_provider"))
+            .unwrap_or(false);
+
+        if !provides_lyrics {
+            continue;
+        }
+
+        // Activate if not already active.
+        if !store.is_active(&installed.id) {
+            let allowlist = manifest
+                .as_ref()
+                .map(|m| {
+                    qext::runtime::permissions::NetworkAllowlist::from_patterns(
+                        &m.permissions.network,
+                    )
+                })
+                .unwrap_or_default();
+            let http = qext::runtime::http::HostHttp::new(
+                allowlist,
+                qext::runtime::http::HttpLimits::default(),
+            );
+            let config = qext::runtime::polyfills::HostConfig {
+                app_version: "4.10.0".to_string(),
+                user_agent: "Q-Music/0.1.1".to_string(),
+                data_dir: Some(ext_state.root.join(".data").join(&installed.id)),
+                http: Some(http),
+                ffmpeg: None,
+            };
+            let host = Arc::new(qext::runtime::polyfills::HostServices::new(config));
+            if let Err(_) = store.activate(&installed.id, host) {
+                continue;
+            }
+        }
+
+        // Try to fetch lyrics.
+        let result = store.with_runtime(&installed.id, |runtime| {
+            let caps = qext::adapter::Capabilities::from_runtime(runtime);
+            if !caps.has("fetchLyrics") && !caps.has("getLyrics") {
+                return None;
+            }
+            let mut cache = qext::calls::CallCache::open_in_memory(0).unwrap();
+            let mut calls = qext::calls::Calls::new(&installed.id, runtime, &mut cache);
+            let request = qext::calls::LyricsRequest {
+                track_id: Some(format!("{}", track_id)),
+                track_name: String::new(),
+                artist_name: String::new(),
+                album_name: None,
+                duration_seconds: None,
+                extra: std::collections::BTreeMap::new(),
+            };
+            calls.lyrics(&request).ok().flatten()
+        });
+
+        if let Some(Some(resolved)) = result {
+            let lyrics_result = &resolved.item;
+            let lines: Vec<serde_json::Value> = lyrics_result
+                .lines
+                .iter()
+                .map(|line| {
+                    serde_json::json!({
+                        "timeMs": line.start_time_ms,
+                        "text": line.words,
+                    })
+                })
+                .collect();
+
+            let synced = !lines.is_empty()
+                && lyrics_result.lines.iter().all(|l| l.start_time_ms > 0);
+
+            return Ok(serde_json::json!({
+                "provider": installed.id,
+                "providerName": installed.display_name.clone().unwrap_or_else(|| installed.id.clone()),
+                "trackId": track_id,
+                "synced": synced,
+                "lines": lines,
+            }));
+        }
+
+        // (duplicate block removed)
+    }
+
+    Ok(serde_json::json!(null))
+}
+
 /// List installed extensions.
 #[tauri::command]
 pub fn extensions_snapshot(
