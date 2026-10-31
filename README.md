@@ -1,7 +1,7 @@
 # Q-Music
 
 <p align="center">
-  <img src="assets/logo.png" alt="Q-Music Logo" width="200" />
+  <img src="assets/App-view.png" alt="Q-Music App View" width="800" />
 </p>
 
 <p align="center">
