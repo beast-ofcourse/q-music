@@ -1059,15 +1059,24 @@ export const demoExtensions: ExtensionSurface = {
   },
 
   async searchProviders(query, limit) {
-    const providers = providerGroups()
+    const defaultId = localStorage.getItem("qmusic.defaultSearchProvider");
+    let providers = providerGroups()
       .find((group) => group.capability === "metadata")
-      ?.providers.filter((provider) => provider.health.state !== "unhealthy");
+      ?.providers.filter((provider) => provider.health.state !== "unhealthy") ?? [];
+
+    // If a default provider is set and healthy, search only that one.
+    if (defaultId) {
+      const defaultProvider = providers.find((p) => p.id === defaultId);
+      if (defaultProvider) {
+        providers = [defaultProvider];
+      }
+    }
 
     if (!providers || providers.length === 0) {
       return [];
     }
 
-    await delay(240);
+    await delay(80);
 
     return providers.map((provider) => {
       if (provider.id === "bugs-music") {

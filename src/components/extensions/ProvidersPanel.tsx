@@ -47,6 +47,9 @@ export function ProvidersPanel() {
   const [readFailure, setReadFailure] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [noticeById, setNoticeById] = useState<Record<string, string>>({});
+  const [defaultProvider, setDefaultProvider] = useState<string | null>(
+    typeof localStorage !== "undefined" ? localStorage.getItem("qmusic.defaultSearchProvider") : null,
+  );
   const [announcement, setAnnouncement] = useState("");
 
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
@@ -203,6 +206,39 @@ export function ProvidersPanel() {
             Each capability is asked in this order, top first. A provider that fails three
             calls in a row is skipped until it answers again. Health is measured for this
             session only; it is not a saved setting.
+          </p>
+        </div>
+
+        <div className="prov-default">
+          <label htmlFor="default-search-provider" className="prov-default-label">
+            Default search provider
+          </label>
+          <select
+            id="default-search-provider"
+            className="prov-default-select"
+            value={defaultProvider ?? ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "") {
+                localStorage.removeItem("qmusic.defaultSearchProvider");
+                setDefaultProvider(null);
+              } else {
+                localStorage.setItem("qmusic.defaultSearchProvider", value);
+                setDefaultProvider(value);
+              }
+            }}
+          >
+            <option value="">All providers</option>
+            {groups
+              ?.find((g) => g.capability === "metadata")
+              ?.providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.displayName}
+                </option>
+              ))}
+          </select>
+          <p className="prov-default-hint">
+            When set, search queries only this provider instead of all of them.
           </p>
         </div>
 

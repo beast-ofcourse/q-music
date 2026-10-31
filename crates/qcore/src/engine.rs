@@ -434,10 +434,11 @@ fn open_stream(
 }
 
 fn copy_block(shared: &Arc<Shared>, output: &mut [f32], channels: usize) {
+    let playing = shared.status() == PlaybackStatus::Playing;
     let frames = output.len() / channels.max(1);
     for frame in 0..frames {
-        let left = shared.ring.pop().unwrap_or(0.0);
-        let right = shared.ring.pop().unwrap_or(0.0);
+        let left = if playing { shared.ring.pop().unwrap_or(0.0) } else { 0.0 };
+        let right = if playing { shared.ring.pop().unwrap_or(0.0) } else { 0.0 };
         for channel in 0..channels {
             let value = if channels == 1 {
                 (left + right) * 0.5
@@ -448,6 +449,10 @@ fn copy_block(shared: &Arc<Shared>, output: &mut [f32], channels: usize) {
             };
             output[frame * channels + channel] = value;
         }
+    }
+    // Drain the ring when not playing so stale samples don't accumulate.
+    if !playing {
+        while shared.ring.pop().is_some() {}
     }
 }
 

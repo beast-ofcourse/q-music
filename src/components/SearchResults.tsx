@@ -86,7 +86,7 @@ export function SearchResults() {
       }
     };
 
-    const timer = setTimeout(doSearch, 150);
+    const timer = setTimeout(doSearch, 50);
     return () => {
       clearTimeout(timer);
       abort.abort();
