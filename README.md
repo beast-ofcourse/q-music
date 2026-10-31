@@ -90,11 +90,14 @@ npm run tauri build
 
 ## Documentation
 
-- [EXTENSIONS.md](EXTENSIONS.md) — Extension compatibility matrix
-- [SECURITY.md](SECURITY.md) — Security model and threat analysis
-- [DESIGN.md](DESIGN.md) — Design system specification
-- [PRODUCT.md](PRODUCT.md) — Product requirements
-- [SURFACE.md](SURFACE.md) — UI surface documentation
+- [docs/architecture.md](docs/architecture.md) - System architecture
+- [docs/development.md](docs/development.md) - Developer guide
+- [docs/extension-development.md](docs/extension-development.md) - Extension development guide
+- [EXTENSIONS.md](EXTENSIONS.md) - Extension compatibility matrix
+- [SECURITY.md](SECURITY.md) - Security model and threat analysis
+- [DESIGN.md](DESIGN.md) - Design system specification
+- [PRODUCT.md](PRODUCT.md) - Product requirements
+- [SURFACE.md](SURFACE.md) - UI surface documentation
 
 ## License
 
