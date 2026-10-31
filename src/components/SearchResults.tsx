@@ -41,9 +41,23 @@ function SearchResultRow({ track, source, onPlay }: SearchResultRowProps) {
  * A provider timeout shows a quiet inline message without delaying other providers.
  */
 export function SearchResults() {
-  const { query, tracks, tracksLoading, play } = useStore();
+  const { query, tracks, tracksLoading, play, notify, openNow } = useStore();
   const [providerResults, setProviderResults] = useState<ProviderSearchOutcome[]>([]);
   const [providerLoading, setProviderLoading] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  async function handleDownload(track: ProviderTrack) {
+    setDownloadingId(track.providerTrackId);
+    try {
+      await backend.enqueueDownload(track);
+      notify(`"${track.title}" added to the download queue`);
+      openNow("downloads");
+    } catch (error) {
+      notify(`Download failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   // Search providers when the query changes
   useEffect(() => {
@@ -152,15 +166,25 @@ export function SearchResults() {
                   <div role="table" aria-label={`${outcome.providerName} results`}>
                     <div className="search-table-body" role="rowgroup">
                       {outcome.results.map((track) => (
-                        <SearchResultRow
-                          key={track.providerTrackId}
-                          track={track}
-                          source={outcome.providerName}
-                          onPlay={(t) => {
-                            // For provider tracks, we'd need to download first. For now, notify.
-                            console.log("Play provider track:", t);
-                          }}
-                        />
+                        <div key={track.providerTrackId} className="provider-result-row">
+                          <SearchResultRow
+                            track={track}
+                            source={outcome.providerName}
+                            onPlay={(t) => {
+                              // For provider tracks, we'd need to download first.
+                              console.log("Play provider track:", t);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="provider-download-btn"
+                            onClick={() => void handleDownload(track)}
+                            disabled={downloadingId === track.providerTrackId}
+                            title={`Download ${track.title}`}
+                          >
+                            {downloadingId === track.providerTrackId ? "Adding..." : "Download"}
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>

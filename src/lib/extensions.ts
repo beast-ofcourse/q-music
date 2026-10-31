@@ -310,6 +310,7 @@ export interface ExtensionSurface {
   queueJobs(): Promise<QueueJob[]>;
   cancelJob(jobId: string): Promise<void>;
   retryJob(jobId: string): Promise<void>;
+  enqueueDownload(track: ProviderTrack): Promise<QueueJob>;
 
   searchProviders(query: string, limit: number): Promise<ProviderSearchOutcome[]>;
   providerLyrics(trackId: number): Promise<ProviderLyrics | null>;
@@ -334,6 +335,7 @@ export const COMMANDS = {
   queueJobs: "queue_jobs",
   queueCancel: "queue_cancel",
   queueRetry: "queue_retry",
+  queueEnqueue: "queue_enqueue",
   search: "search_providers",
   lyrics: "provider_lyrics",
 } as const;
@@ -363,6 +365,7 @@ export const tauriExtensions: ExtensionSurface = {
   queueJobs: () => invoke(COMMANDS.queueJobs),
   cancelJob: (jobId) => invoke(COMMANDS.queueCancel, { jobId }),
   retryJob: (jobId) => invoke(COMMANDS.queueRetry, { jobId }),
+  enqueueDownload: (track) => invoke(COMMANDS.queueEnqueue, { track }),
 
   searchProviders: (query, limit) => invoke(COMMANDS.search, { query, limit }),
   providerLyrics: (trackId) => invoke(COMMANDS.lyrics, { trackId }),
@@ -1033,6 +1036,29 @@ export const demoExtensions: ExtensionSurface = {
     job.failure = null;
     job.updatedAt = Date.now();
     publishQueue();
+  },
+
+  async enqueueDownload(track) {
+    ensureQueueTicker();
+    const newJob: QueueJob = {
+      id: `demo-job-${Date.now()}`,
+      trackId: track.providerTrackId,
+      title: track.title,
+      artist: track.artist,
+      provider: track.provider,
+      quality: track.quality ?? "best",
+      stage: "queued",
+      percent: 0,
+      bytesWritten: 0,
+      bytesTotal: 9_400 * 1024,
+      speedBps: null,
+      outputPath: `demo/downloads/${track.artist} - ${track.title}.flac`,
+      failure: null,
+      updatedAt: Date.now(),
+    };
+    queue = [...queue, newJob];
+    publishQueue();
+    return { ...newJob };
   },
 
   async searchProviders(query, limit) {
