@@ -76,6 +76,7 @@ pub fn run() {
             commands::reveal_track,
             ext_commands::extensions_snapshot,
             ext_commands::extensions_install_file,
+            ext_commands::search_providers,
         ])
         .setup(|app| {
             let root = AppPaths::resolve().data_dir;
