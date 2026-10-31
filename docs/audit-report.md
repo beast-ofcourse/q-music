@@ -222,12 +222,135 @@ All supported by Symphonia: FLAC, MP3, M4A/AAC, WAV, OGG, OPUS, AIFF, ALAC
 - Provider priority/retry not yet wired in desktop mode
 - Extension invoke_action not yet wired
 
+## Phase 6 — UI/UX Consistency Audit
+
+### 6.1 Screen Inventory
+
+| Screen | Status | Notes |
+|--------|--------|-------|
+| Library | ✅ | Track table with sorting, filtering |
+| Recently played | ✅ | Filtered view |
+| Favorites | ✅ | Filtered view |
+| Albums | ✅ | Grouped browse |
+| Artists | ✅ | Grouped browse |
+| Album detail | ✅ | Track list for album |
+| Artist detail | ✅ | Track list for artist |
+| Playlists | ✅ | Manual + smart |
+| Playlist detail | ✅ | Track list with reorder |
+| Folders | ✅ | Folder management |
+| Folder detail | ✅ | Tracks in folder |
+| Extensions | ✅ | Catalogue + providers tabs |
+| Equalizer | ✅ | 10-band EQ |
+| Settings | ✅ | Theme, speed, volume, device |
+| Lyrics (panel) | ✅ | Synced lyrics in now panel |
+| Lyrics (full view) | ✅ | Two-column, big text |
+| Downloads | ✅ | Queue with progress |
+| Queue (play) | ✅ | Play queue list |
+| Editor | ✅ | Tag editing |
+| Browse | ✅ | Albums/artists |
+
+### 6.2 Design Token Consistency
+
+| Token | Status | Notes |
+|-------|--------|-------|
+| Typography | ✅ | Archivo + IBM Plex Mono, 8 sizes |
+| Colors | ✅ | 8 themes, all WCAG AA |
+| Spacing | ✅ | 7-step scale (4-48px) |
+| Borders | ✅ | 1px hairlines, consistent |
+| Radii | ✅ | 2px (sm), 4px (md), 16px (artwork) |
+| Shadows | ✅ | Consistent per theme |
+| Icons | ✅ | Custom Icon component, 14 icons |
+| Button dimensions | ✅ | 32px standard, 26px compact |
+| Hover/active states | ✅ | Consistent across components |
+| Animations | ✅ | 120-400ms, exponential ease-out |
+| Reduced motion | ✅ | All animations disabled |
+
+### 6.3 Issues Found
+
+- **Inconsistent empty states**: Some views use `.empty` class, others use custom markup
+- **Text overflow**: Long track titles in narrow columns may overflow
+- **Keyboard navigation**: Most views support keyboard, but some (extensions) need work
+- **Accessibility**: ARIA labels present on most elements, but some interactive elements lack focus indicators
+
+### 6.4 UI Improvements Made
+
+- ✅ Professional search results with album art and provider cards
+- ✅ Clean lyrics view with two-column layout
+- ✅ 5 new themes (apple, glass, catppuccin-mocha, sky-catppuccin, babypink-catppuccin)
+- ✅ Download buttons on search results
+- ✅ Provider status indicators
+
+## Phase 7 — Database and Data Integrity
+
+### 7.1 Schema
+
+| Table | Purpose | Status |
+|-------|---------|--------|
+| `tracks` | Library index | ✅ |
+| `playlists` | Playlist metadata | ✅ |
+| `playlist_items` | Playlist tracks | ✅ |
+| `settings` | Key-value settings | ✅ |
+| `call_cache` | Extension call cache | ✅ |
+
+### 7.2 Integrity Checks
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Foreign keys | ✅ | Enforced via PRAGMA |
+| Transactions | ✅ | Used for batch operations |
+| Duplicate records | ⚠️ | Not explicitly prevented |
+| Playlist integrity | ✅ | Cascade delete on playlist removal |
+| Track metadata consistency | ✅ | Written back via Lofty |
+| Playback history | ✅ | Persisted in tracks table |
+| Settings persistence | ✅ | Key-value store |
+| Corrupted data recovery | ⚠️ | Basic error handling, no recovery |
+
+### 7.3 Issues Found
+
+- **No migration system**: Schema changes require manual DB recreation
+- **No backup/restore**: User data not backed up automatically
+- **WAL checkpoint**: Not explicitly managed
+
+## Phase 8 — Performance and Resource Management
+
+### 8.1 Performance Audit
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Library scanning | ✅ | Separate WAL handle, incremental |
+| Database queries | ✅ | Indexed columns, prepared statements |
+| Artwork caching | ✅ | On-demand extraction, cached |
+| Memory usage | ✅ | Low footprint, ring buffer (1<<17) |
+| CPU consumption | ✅ | Decode on separate thread |
+| UI rendering | ✅ | React, minimal re-renders |
+| Audio buffering | ✅ | 1.36s headroom (1<<17 samples) |
+| Background tasks | ✅ | Scan on separate thread |
+| Network requests | ✅ | ureq blocking, per-extension |
+| Extension execution | ✅ | QuickJS with limits |
+
+### 8.2 Optimizations Made
+
+- ✅ Reduced search debounce (150ms → 50ms)
+- ✅ Reduced provider delay (240ms → 80ms)
+- ✅ Audio ring buffer drain on pause (eliminated 2s delay)
+- ✅ Lazy context creation (extensions not loaded at boot)
+
+### 8.3 Recommendations
+
+- Add artwork pre-caching during scan
+- Implement incremental rescan (only changed files)
+- Add database connection pooling for concurrent access
+
 ## Summary
 
-The application is in good shape for the core music player functionality. The main remaining gap is the incomplete download queue integration in desktop mode. The audio engine is solid with the pause delay fix. The frontend is complete and well-tested.
+The application is in good shape. Core music player functionality is solid. The main remaining gaps are:
+1. Download queue integration in desktop mode
+2. Position persistence across restarts
+3. Dead code cleanup
 
-### Recommendations
+### Overall Test Results
 
-1. Implement full download queue integration in desktop mode — highest priority
-2. Add position persistence across restarts — medium priority
-3. Clean up dead code and unused dependencies — low priority
+- `qext`: 267 tests passed
+- `qcore`: 49 tests passed
+- Frontend: TypeScript 0 errors, Vite build success
+- Total: 316 tests, all passing
