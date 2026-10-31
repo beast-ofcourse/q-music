@@ -7,28 +7,46 @@
 
 use crate::model::{LyricLine, Lyrics, LyricsSource};
 
+/// Metadata tag keys that LRC files may contain. These are stripped from display.
+const METADATA_KEYS: &[&str] = &[
+    "ar", "ti", "al", "au", "by", "offset", "re", "ve", "length", "tool", "encoder",
+];
+
 /// Parses lyric file contents, accepting both `.lrc` and plain text.
+/// Handles standard LRC, enhanced LRC (inline word timestamps), and metadata tags.
 pub fn parse(track_id: i64, source: LyricsSource, content: &str) -> Lyrics {
     let mut lines: Vec<LyricLine> = Vec::new();
     let mut stray_warnings = 0usize;
 
     for raw in content.lines() {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Skip metadata tags like [ar:Artist], [ti:Title], [al:Album], etc.
+        if is_metadata_tag(trimmed) {
+            continue;
+        }
+
         let mut stamps: Vec<u64> = Vec::new();
-        let mut rest = raw.trim_start();
+        let mut rest = trimmed;
 
         while let Some((stamp, remainder)) = take_timestamp(rest) {
             stamps.push(stamp);
             rest = remainder.trim_start();
         }
 
-        let text = rest.trim().to_string();
+        // Strip inline enhanced timestamps (<mm:ss.xx>) from the text.
+        let text = strip_enhanced_timestamps(rest).trim().to_string();
+
+        // Remove any stray timestamp-like patterns that leaked through.
+        let text = strip_stray_timestamps(&text);
 
         if stamps.is_empty() {
             if text.is_empty() {
                 continue;
             }
-            // A line without a stamp inside an otherwise timestamped file is kept
-            // unsynced; the editor shows it as lyric text without a cue.
             lines.push(LyricLine { time_ms: None, text });
             continue;
         }
@@ -55,6 +73,130 @@ pub fn parse(track_id: i64, source: LyricsSource, content: &str) -> Lyrics {
     };
 
     Lyrics { track_id, source, lines, synced, warning }
+}
+
+/// Check if a line is a metadata tag like [ar:Artist] or [ti:Title].
+fn is_metadata_tag(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('[') {
+        return false;
+    }
+    let close = match trimmed.find(']') {
+        Some(c) => c,
+        None => return false,
+    };
+    let inside = &trimmed[1..close];
+    // Metadata tags have a colon separator: [key:value]
+    if let Some(colon_pos) = inside.find(':') {
+        let key = &inside[..colon_pos];
+        if METADATA_KEYS.contains(&key.trim().to_lowercase().as_str()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Strip enhanced LRC inline timestamps like <00:32.116> or <32.116>.
+fn strip_enhanced_timestamps(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '<' {
+            // Try to consume a timestamp until '>'
+            let mut buf = String::new();
+            let mut found_close = false;
+            for ch in chars.by_ref() {
+                if ch == '>' {
+                    found_close = true;
+                    break;
+                }
+                buf.push(ch);
+            }
+            // If it looks like a timestamp, skip it; otherwise keep the text.
+            if found_close && is_timestamp_like(&buf) {
+                // Skip — it's a timestamp
+            } else {
+                result.push('<');
+                result.push_str(&buf);
+                if found_close {
+                    result.push('>');
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Check if a string looks like a timestamp (mm:ss.xx or ss.xx).
+fn is_timestamp_like(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    // Match patterns like 00:32.116, 32.116, 00:32, 32
+    let parts: Vec<&str> = s.split(':').collect();
+    match parts.len() {
+        1 => {
+            // Could be seconds or seconds.fraction
+            let p = parts[0];
+            let (whole, frac) = if let Some(dot) = p.find('.') {
+                (&p[..dot], &p[dot + 1..])
+            } else {
+                (p, "")
+            };
+            whole.chars().all(|c| c.is_ascii_digit()) && frac.chars().all(|c| c.is_ascii_digit())
+        }
+        2 => {
+            let m = parts[0];
+            let s = parts[1];
+            m.chars().all(|c| c.is_ascii_digit())
+                && {
+                    let (whole, frac) = if let Some(dot) = s.find('.') {
+                        (&s[..dot], &s[dot + 1..])
+                    } else {
+                        (s, "")
+                    };
+                    whole.chars().all(|c| c.is_ascii_digit()) && frac.chars().all(|c| c.is_ascii_digit())
+                }
+        }
+        _ => false,
+    }
+}
+
+/// Remove any stray timestamp patterns that leaked through.
+fn strip_stray_timestamps(text: &str) -> String {
+    let mut result = text.to_string();
+    // Remove any remaining <...> that look like timestamps
+    while let Some(start) = result.find('<') {
+        if let Some(end) = result[start..].find('>') {
+            let inner = &result[start + 1..start + end];
+            if is_timestamp_like(inner) {
+                result = format!("{}{}", &result[..start], &result[start + end + 1..]);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    // Remove version markers like v1:, v2:, etc.
+    if let Some(rest) = result.strip_prefix('v') {
+        // Check if it's v<number>:
+        let mut end_idx = 0;
+        for (i, c) in rest.char_indices() {
+            if c.is_ascii_digit() {
+                end_idx = i + 1;
+            } else {
+                break;
+            }
+        }
+        if end_idx > 0 && rest[end_idx..].starts_with(':') {
+            result = rest[end_idx + 1..].trim().to_string();
+        }
+    }
+    result.trim().to_string()
 }
 
 /// Reads `[mm:ss]`, `[mm:ss.xx]`, `[mm:ss.xxx]` or `[hh:mm:ss]` and returns

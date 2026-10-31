@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Icon } from "../components/Icon";
 import { useArtwork } from "../lib/artwork";
@@ -8,9 +8,11 @@ import "../styles/lyrics-view.css";
 /**
  * Full-screen synced lyrics view.
  *
- * Big, minimal, visually synced: the active line is centered and scaled,
- * past lines fade up, future lines fade down. Auto-scrolls to keep the
- * active line in the middle. No chrome, no borders — just the words.
+ * Cinematic, minimal, immersive: the active line is centered and scaled,
+ * past lines fade up, future lines fade down. Blurred artwork behind.
+ * Auto-scrolls to keep the active line centered, but allows manual
+ * scrolling without immediately forcing back. A "return to current" button
+ * appears when the user scrolls away.
  */
 export function LyricsView() {
   const { lyrics, lyricsLoading, snapshot, seek, currentTrack, setView, loadLyrics } =
@@ -18,6 +20,8 @@ export function LyricsView() {
   const artwork = useArtwork(currentTrack?.artId ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
+  const [userScrolled, setUserScrolled] = useState(false);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeIndex = useMemo(() => {
     if (!lyrics || !lyrics.synced) return -1;
@@ -34,9 +38,27 @@ export function LyricsView() {
     }
   }, [currentTrack?.id, loadLyrics]);
 
+  // Auto-scroll to active line, but only if user hasn't manually scrolled recently.
   useEffect(() => {
+    if (userScrolled) return;
     activeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeIndex]);
+  }, [activeIndex, userScrolled]);
+
+  // Detect manual scroll.
+  const handleScroll = useCallback(() => {
+    if (scrollTimerRef.current) {
+      clearTimeout(scrollTimerRef.current);
+    }
+    setUserScrolled(true);
+    scrollTimerRef.current = setTimeout(() => {
+      setUserScrolled(false);
+    }, 4000);
+  }, []);
+
+  const returnToCurrent = useCallback(() => {
+    setUserScrolled(false);
+    activeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, []);
 
   if (!currentTrack) {
     return (
@@ -65,6 +87,21 @@ export function LyricsView() {
   if (!lyrics || lyrics.lines.length === 0) {
     return (
       <div className="lyrics-view">
+        {artwork && (
+          <div
+            className="lyrics-view-bg"
+            style={{ backgroundImage: `url(${artwork})` }}
+            aria-hidden="true"
+          />
+        )}
+        <button
+          type="button"
+          className="lyrics-view-close"
+          onClick={() => setView({ kind: "library" })}
+          aria-label="Close lyrics view"
+        >
+          <Icon name="close" size={20} />
+        </button>
         <div className="lyrics-view-empty">
           <Icon name="disc" size={48} />
           <p className="lyrics-view-empty-title">No lyrics for this track</p>
@@ -111,7 +148,7 @@ export function LyricsView() {
       </div>
 
       {/* Lyrics */}
-      <div className="lyrics-view-scroll" ref={scrollRef}>
+      <div className="lyrics-view-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="lyrics-view-spacer" />
         {lyrics.lines.map((line, index) => {
           const isActive = index === activeIndex;
@@ -137,6 +174,17 @@ export function LyricsView() {
         })}
         <div className="lyrics-view-spacer" />
       </div>
+
+      {/* Return to current button */}
+      {userScrolled && (
+        <button
+          type="button"
+          className="lyrics-view-return"
+          onClick={returnToCurrent}
+        >
+          Return to current
+        </button>
+      )}
     </div>
   );
 }
