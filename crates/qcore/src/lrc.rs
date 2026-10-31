@@ -43,6 +43,11 @@ pub fn parse(track_id: i64, source: LyricsSource, content: &str) -> Lyrics {
         // Remove any stray timestamp-like patterns that leaked through.
         let text = strip_stray_timestamps(&text);
 
+        // Skip metadata/credit lines.
+        if is_metadata_line(&text) {
+            continue;
+        }
+
         if stamps.is_empty() {
             if text.is_empty() {
                 continue;
@@ -163,6 +168,44 @@ fn is_timestamp_like(s: &str) -> bool {
         }
         _ => false,
     }
+}
+
+/// Check if a line is a metadata/credit line that should not be displayed as lyrics.
+fn is_metadata_line(text: &str) -> bool {
+    let lower = text.trim().to_lowercase();
+    if lower.is_empty() {
+        return true;
+    }
+    // Skip URLs
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return true;
+    }
+    // Skip common credit/metadata patterns
+    let credit_prefixes = [
+        "produced", "written", "composed", "arranged", "mixed", "mastered",
+        "engineered", "recorded", "published", "copyright", "©", "℗",
+    ];
+    for prefix in &credit_prefixes {
+        if lower.starts_with(prefix) {
+            return true;
+        }
+    }
+    // Skip version-only markers
+    if lower.starts_with('v') {
+        let rest = &lower[1..];
+        let mut end = 0;
+        for c in rest.chars() {
+            if c.is_ascii_digit() {
+                end += 1;
+            } else {
+                break;
+            }
+        }
+        if end > 0 && rest[end..].starts_with(':') && rest[end + 1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
 }
 
 /// Remove any stray timestamp patterns that leaked through.

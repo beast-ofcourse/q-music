@@ -84,6 +84,20 @@ function stripStrayTimestamps(text: string): string {
   return result.trim();
 }
 
+/** Check if a line is a metadata/credit line that should not be displayed as lyrics. */
+function isMetadataLine(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  // Skip empty lines
+  if (!lower) return true;
+  // Skip lines that are just URLs
+  if (/^https?:\/\//.test(lower)) return true;
+  // Skip common credit/metadata patterns
+  if (/^(produced|written|composed|arranged|mixed|mastered|engineered|recorded|published|copyright|©|℗|p\.\s*&\s*c\.)/i.test(lower)) return true;
+  // Skip lines that are just "v1:", "v2:", etc.
+  if (/^v\d+:\s*$/.test(lower)) return true;
+  return false;
+}
+
 /**
  * Reads LRC text into lines. Text with no timestamp is kept as an unsynced line.
  * Handles standard LRC, enhanced LRC (inline word timestamps), and metadata tags.
@@ -101,7 +115,7 @@ export function parseLrc(content: string): LyricLine[] {
     const match = TIMESTAMP.exec(text);
     if (!match) {
       const cleaned = stripStrayTimestamps(stripEnhancedTimestamps(text));
-      if (cleaned) {
+      if (cleaned && !isMetadataLine(cleaned)) {
         lines.push({ timeMs: null, text: cleaned });
       }
       continue;
@@ -113,7 +127,7 @@ export function parseLrc(content: string): LyricLine[] {
     const lyric = stripStrayTimestamps(stripEnhancedTimestamps(match[4] ?? ""));
     const timeMs = minutes * 60_000 + seconds * 1000 + fraction;
 
-    if (lyric) {
+    if (lyric && !isMetadataLine(lyric)) {
       lines.push({ timeMs, text: lyric });
     }
   }
