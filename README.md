@@ -1,104 +1,202 @@
 # Q-Music
 
-**Quantum Music** — a cross-platform desktop music player built with a Rust native core and a modern web frontend.
+<p align="center">
+  <img src="assets/logo.png" alt="Q-Music Logo" width="200" />
+</p>
 
-![Q-Music](https://img.shields.io/badge/version-0.1.0-blue) ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange) ![Tauri](https://img.shields.io/badge/tauri-2.x-blue) ![React](https://img.shields.io/badge/react-19-61dafb)
+<p align="center">
+  <strong>A desktop music player that gets out of your way.</strong><br>
+  Built for people who own their music.
+</p>
 
-## Overview
+<p align="center">
+  <a href="https://github.com/beast-ofcourse/q-music/releases/tag/v0.1.0">
+    <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version" />
+  </a>
+  <a href="https://github.com/beast-ofcourse/q-music/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/beast-ofcourse/q-music/ci.yml?style=flat-square&label=CI" alt="CI" />
+  </a>
+  <img src="https://img.shields.io/badge/rust-1.85%2B-orange?style=flat-square" alt="Rust" />
+  <img src="https://img.shields.io/badge/tauri-2.x-blue?style=flat-square" alt="Tauri" />
+  <img src="https://img.shields.io/badge/react-19-61dafb?style=flat-square" alt="React" />
+  <a href="https://github.com/beast-ofcourse/q-music/blob/master/LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
+  </a>
+</p>
 
-Q-Music combines a high-performance Rust audio engine with a premium React/Tauri desktop interface. It supports a wide range of audio formats, provides a rich library management experience, and includes a modular extension platform compatible with the Mornye Extension format.
+---
+
+## Why Q-Music?
+
+I built Q-Music because every local music player I tried either handled three formats, demanded a streaming account, or felt like a utility from 2005. I wanted something that opens fast, plays anything I throw at it, and gets out of the way.
+
+The whole listening path — scan, index, decode, output, tag write, lyric sync — is one native Rust engine. No browser transcoding, no server dependency, no account. Just your files, played well.
+
+## What It Does
+
+- **Plays everything** — FLAC, MP3, M4A/AAC, ALAC, WAV, OGG, Opus, AIFF. No conversions needed.
+- **Gapless playback** — sample-accurate transitions between tracks
+- **Real equalizer** — 10-band, not a preset dropdown
+- **Lyrics** — embedded tags, sidecar `.lrc` files, or type them yourself with timing
+- **Smart playlists** — rule-based, not just manual lists
+- **Fast search** — instant across a 100k-track library
+- **Extensions** — plug in metadata, search, and download providers (Mornye-compatible)
+- **Lightweight** — opens in seconds, stays small in memory
+
+## Screenshots
+
+<p align="center">
+  <img src=".impeccable/review/01-library-idle.png" alt="Library view" width="700" />
+</p>
+<p align="center">
+  <em>Library view — idle state</em>
+</p>
+
+<p align="center">
+  <img src=".impeccable/review/02-library-playing.png" alt="Library playing" width="700" />
+</p>
+<p align="center">
+  <em>Library view — playing a track</em>
+</p>
+
+<p align="center">
+  <img src=".impeccable/review/05-search.png" alt="Search" width="700" />
+</p>
+<p align="center">
+  <em>Search with provider results</em>
+</p>
 
 ## Architecture
 
+```
+┌─────────────────────────────────────────────┐
+│         Frontend (React 19 + Tauri)         │
+│  Views · Components · State · IPC           │
+├─────────────────────────────────────────────┤
+│         Tauri Shell (Rust)                  │
+│  Commands · State · OS Media Controls       │
+├────────────────────┬────────────────────────┤
+│   qcore (Rust)     │   qext (Rust)          │
+│   Audio engine     │   Extension host       │
+│   Library index    │   QuickJS sandbox      │
+│   Tag read/write   │   Provider registry    │
+│   LRC parser       │   Download queue       │
+└────────────────────┴────────────────────────┘
+```
+
+**Rust owns everything that touches audio.** The webview only paints pixels and sends commands. No sample buffers cross the IPC boundary.
+
+## Tech Stack
+
 | Layer | Technology |
 |-------|-----------|
-| Audio decode | Symphonia 0.6.1 |
-| Audio output | CPAL 0.18.2 |
-| Tags/metadata | Lofty 0.25.5 |
-| Database | rusqlite 0.41.1 (bundled) |
-| Desktop shell | Tauri 2 |
+| Audio decode | [Symphonia](https://github.com/pdeljanov/Symphonia) 0.6.1 |
+| Audio output | [CPAL](https://github.com/RustAudio/cpal) 0.18.2 |
+| Tags/metadata | [Lofty](https://github.com/Serial-ATA/lofty-rs) 0.25.5 |
+| Database | [rusqlite](https://github.com/rusqlite/rusqlite) 0.41.1 |
+| Desktop shell | [Tauri](https://tauri.app/) 2 |
 | Frontend | React 19 + TypeScript + Vite 8 |
-| Extension runtime | QuickJS (rquickjs 0.14) |
-| HTTP client | ureq 3.5 (rustls + cookies) |
-
-## Features
-
-### Audio Playback
-- **Formats**: FLAC, MP3, M4A/AAC, WAV, OGG, OPUS, AIFF, ALAC
-- Gapless playback, shuffle, repeat (off/one/all), speed control (tape-style)
-- 10-band EQ, device selection, keyboard shortcuts
-- OS media controls (souvlaki)
-- Low memory footprint, fast startup
-
-### Library Management
-- Recursive folder scanning with progress
-- Manual and smart playlists
-- Search, sorting, filtering by genre/format
-- Album/artist browsing, folder navigation
-- Favorites, recently played, recently added
-
-### Lyrics
-- Embedded + sidecar (.lrc/.txt) with sync
-- Manual lyric editing with timing
-- Provider lyrics search (Apple Music)
-
-### Extension Platform (Mornye-compatible)
-- Modular Rust extension host with sandboxed JS runtime
-- Permissions: network, storage, file (scoped)
-- Package safety: path traversal, archive bombs, hash verification
-- Provider registry with priority ordering and health monitoring
-- Download queue with progress, cancel, retry, resume
-- Automatic metadata/artwork/lyrics embedding
-- 5 integration packages supported
-- 2 download providers refused (missing runtime features)
-
-### Security
-- Packages treated as untrusted code
-- QuickJS sandbox with memory/stack limits
-- Path traversal prevention
-- Network domain allowlisting
-- SHA-256 package integrity verification
+| Extension runtime | [QuickJS](https://bellard.org/quickjs/) (rquickjs 0.14) |
+| HTTP client | [ureq](https://github.com/algesten/ureq) 3.5 |
 
 ## Getting Started
 
 ### Prerequisites
-- Rust 1.85+
-- Node.js 22+
+
+- Rust 1.85+ (`rustup`)
+- Node.js 22+ (`npm`)
 - Tauri CLI
 
 ### Development
 
 ```bash
-# Install frontend dependencies
+# Clone
+git clone https://github.com/beast-ofcourse/q-music.git
+cd q-music
+
+# Install frontend deps
 npm install
 
-# Run in development mode
+# Run in dev mode (frontend + Rust, hot reload)
 npm run tauri dev
-
-# Run tests
-cargo test -p qext --manifest-path crates/qext/Cargo.toml
-cargo test -p qcore --manifest-path crates/qcore/Cargo.toml
-npx tsc --noEmit
-npx vite build
 ```
 
-### Build
+### Browser-Only Mode
+
+For UI work without the Rust backend:
+
+```bash
+npm run dev
+```
+
+Opens at `http://localhost:5173` with a demo backend and synthetic data.
+
+### Building
 
 ```bash
 npm run tauri build
+# Output: src-tauri/target/release/bundle/
 ```
+
+## Testing
+
+```bash
+# Rust — extension host (267 tests)
+cargo test -p qext --manifest-path crates/qext/Cargo.toml
+
+# Rust — extension host with real packages (6 tests)
+cargo test -p qext --manifest-path crates/qext/Cargo.toml --features real-packages
+
+# Rust — audio engine (49 tests)
+cargo test -p qcore --manifest-path crates/qcore/Cargo.toml
+
+# Frontend — type check
+npx tsc --noEmit
+
+# Frontend — build
+npx vite build
+```
+
+## Extensions
+
+Q-Music supports Mornye-compatible extension packages (`.sflx`). Extensions provide metadata, search, lyrics, and download capabilities from music services.
+
+**Supported out of the box:**
+- Spotify Web, Apple Music, Bugs Music, Melon Music, Genie Music (metadata + search + lyrics)
+- Amazon Music, Tidal, SoundCloud, Deezer, Qobuz, JioSaavn, YouTube Music (metadata + download)
+
+**Install an extension:**
+1. Open Extensions view
+2. Click "Install from file..."
+3. Select a `.sflx` or `.spotiflac-ext` file from the `extensions/` folder
+
+See [EXTENSIONS.md](EXTENSIONS.md) for the full compatibility matrix.
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) - System architecture
-- [docs/development.md](docs/development.md) - Developer guide
-- [docs/extension-development.md](docs/extension-development.md) - Extension development guide
-- [EXTENSIONS.md](EXTENSIONS.md) - Extension compatibility matrix
-- [SECURITY.md](SECURITY.md) - Security model and threat analysis
-- [DESIGN.md](DESIGN.md) - Design system specification
-- [PRODUCT.md](PRODUCT.md) - Product requirements
-- [SURFACE.md](SURFACE.md) - UI surface documentation
+| Document | Description |
+|----------|-------------|
+| [docs/architecture.md](docs/architecture.md) | System architecture and design decisions |
+| [docs/development.md](docs/development.md) | Developer guide and coding conventions |
+| [docs/extension-development.md](docs/extension-development.md) | How to build extensions |
+| [EXTENSIONS.md](EXTENSIONS.md) | Extension compatibility matrix |
+| [SECURITY.md](SECURITY.md) | Security model and threat analysis |
+| [DESIGN.md](DESIGN.md) | Design system specification |
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run the test suite
+5. Submit a pull request
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  <em>Built with Rust, Tauri, and a lot of late nights.</em>
+</p>
